@@ -284,9 +284,30 @@
 
       candlestickSeries.setData(chartData);
 
-      // Fit content after setting data, then update overlays
+      // Set visible range to last 6 months + 2 months future, then update overlays
       setTimeout(() => {
-        chart?.timeScale().fitContent();
+        if (chart && chartData.length > 0) {
+          const lastCandle = chartData[chartData.length - 1];
+          const lastTimestamp = lastCandle.time as number;
+
+          // Calculate 6 months back (approximately 180 days)
+          const sixMonthsInSeconds = 180 * 24 * 60 * 60;
+          const twoMonthsInSeconds = 60 * 24 * 60 * 60;
+
+          const fromTime = lastTimestamp - sixMonthsInSeconds;
+          const toTime = lastTimestamp + twoMonthsInSeconds;
+
+          // Set the visible time range
+          chart.timeScale().setVisibleRange({
+            from: fromTime as Time,
+            to: toTime as Time,
+          });
+
+          // Reset price scale to auto-fit (like double-click on price axis)
+          chart.priceScale('right').applyOptions({ autoScale: true });
+        } else {
+          chart?.timeScale().fitContent();
+        }
 
         // Mark chart as ready - coordinates can now be calculated correctly
         chartReady = true;
