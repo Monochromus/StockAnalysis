@@ -4,7 +4,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    app_name: str = "WaveSense Pro"
+    app_name: str = "CommodityCockpit"
     debug: bool = False
 
     # API Settings
@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Retry Settings
     max_retries: int = 3
     retry_delay_seconds: float = 1.0
+
+    # Gemini API Settings (for News Dashboard)
+    gemini_api_key: Optional[str] = None
+    news_cache_ttl_seconds: int = 14400  # 4 hours
+    news_cache_db_path: str = "data/news_cache.db"
 
     class Config:
         env_file = ".env"

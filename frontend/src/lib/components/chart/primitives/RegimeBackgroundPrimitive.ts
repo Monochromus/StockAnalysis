@@ -186,7 +186,8 @@ export class RegimeBackgroundPrimitive implements ISeriesPrimitive<Time> {
 
     for (let i = 0; i < this._regimeData.length; i++) {
       const point = this._regimeData[i];
-      const time = Math.floor(new Date(point.timestamp).getTime() / 1000);
+      // Normalize timestamp to UTC midnight for consistency across timezones
+      const time = Math.floor(new Date(point.timestamp.substring(0, 10) + 'T00:00:00Z').getTime() / 1000);
 
       if (!currentBlock || currentBlock.regimeName !== point.regime_name) {
         // Start a new block
@@ -225,7 +226,8 @@ export class RegimeBackgroundPrimitive implements ISeriesPrimitive<Time> {
       const startX = timeScale.timeToCoordinate(currentBlock.startTime as Time);
       // Extend the last block a bit to cover the last candle
       const endTime = this._regimeData[this._regimeData.length - 1];
-      const lastTime = Math.floor(new Date(endTime.timestamp).getTime() / 1000);
+      // Normalize timestamp to UTC midnight for consistency
+      const lastTime = Math.floor(new Date(endTime.timestamp.substring(0, 10) + 'T00:00:00Z').getTime() / 1000);
       const endX = timeScale.timeToCoordinate(lastTime as Time);
 
       if (startX !== null && endX !== null) {

@@ -6,6 +6,16 @@
   import { pinnedZonesStore, combinedProjectedZones } from '$lib/stores/pinnedZones';
   import { ElliottWavePrimitive, TargetZonePrimitive, PivotHighlightPrimitive, HigherDegreePrimitive, ProjectedZonePrimitive, RegimeBackgroundPrimitive, IndicatorOverlayPrimitive, VolumeOverlayPrimitive, TradeMarkerPrimitive, ProphetForecastPrimitive, type WaveData } from './primitives';
 
+  /**
+   * Normalize timestamp to UTC midnight for consistent comparison across timezones.
+   * This ensures BTC-USD (UTC) and other assets (EST/other) use the same reference point.
+   */
+  function normalizeTimestamp(timestamp: string): number {
+    // Extract just the date part (YYYY-MM-DD) and treat as UTC midnight
+    const dateOnly = timestamp.substring(0, 10);
+    return Math.floor(new Date(dateOnly + 'T00:00:00Z').getTime() / 1000);
+  }
+
   let {
     candles = [],
     waves = [],
@@ -27,6 +37,7 @@
     hmmEnabled = false,
     // Backtest trades
     trades = [],
+    showTradeMarkers = false,
     // Prophet props
     prophetForecasts = [],
     prophetHorizonToggles = null,
@@ -53,6 +64,7 @@
     hmmEnabled?: boolean;
     // Backtest trades
     trades?: Trade[];
+    showTradeMarkers?: boolean;
     // Prophet props
     prophetForecasts?: ProphetForecastSeries[];
     prophetHorizonToggles?: ProphetHorizonToggles | null;
@@ -129,7 +141,7 @@
     let highestPrice = -Infinity;
 
     for (const pivot of pivots) {
-      const time = Math.floor(new Date(pivot.timestamp).getTime() / 1000);
+      const time = normalizeTimestamp(pivot.timestamp);
       if (time < rangeFrom || time > rangeTo) continue;
 
       if (pivot.type === 'low' && pivot.price < lowestPrice) {
@@ -275,7 +287,7 @@
 
     try {
       const chartData = candles.map((c) => ({
-        time: Math.floor(new Date(c.timestamp).getTime() / 1000) as any,
+        time: normalizeTimestamp(c.timestamp) as any,
         open: c.open,
         high: c.high,
         low: c.low,
@@ -392,7 +404,7 @@
         const recent = candles.slice(-n);
         const totalSec = (new Date(recent[recent.length - 1].timestamp).getTime() - new Date(recent[0].timestamp).getTime()) / 1000;
         barIntervalSec = totalSec / (recent.length - 1);
-        lastBarTimeSec = Math.floor(new Date(candles[candles.length - 1].timestamp).getTime() / 1000);
+        lastBarTimeSec = normalizeTimestamp(candles[candles.length - 1].timestamp);
         lastBarIndex = candles.length - 1;
       }
 
@@ -661,12 +673,14 @@
   $effect(() => {
     const currentTrades = trades;
     const currentHmmEnabled = hmmEnabled;
+    const currentShowTradeMarkers = showTradeMarkers;
     const isReady = chartReady;
 
     if (tradeMarkerPrimitive && isReady) {
-      // Show trades only when HMM is enabled and there are trades
-      tradeMarkerPrimitive.setVisible(currentHmmEnabled);
-      if (currentHmmEnabled && currentTrades.length > 0) {
+      // Show trades only when HMM is enabled AND showTradeMarkers is true
+      const shouldShowTrades = currentHmmEnabled && currentShowTradeMarkers;
+      tradeMarkerPrimitive.setVisible(shouldShowTrades);
+      if (shouldShowTrades && currentTrades.length > 0) {
         tradeMarkerPrimitive.setTrades(currentTrades);
       } else {
         tradeMarkerPrimitive.setTrades([]);
@@ -701,8 +715,8 @@
         if (candles.length > 0 && currentForecasts[0]?.series.length > 0) {
           const sampleCandle = candles[candles.length - 1];
           const sampleProphet = currentForecasts[0].series[0];
-          const candleTs = Math.floor(new Date(sampleCandle.timestamp).getTime() / 1000);
-          const prophetTs = Math.floor(new Date(sampleProphet.timestamp).getTime() / 1000);
+          const candleTs = normalizeTimestamp(sampleCandle.timestamp);
+          const prophetTs = normalizeTimestamp(sampleProphet.timestamp);
           log('Timestamp comparison', {
             candleTimestamp: sampleCandle.timestamp,
             candleUnix: candleTs,
@@ -724,13 +738,13 @@
         let lastCandleDate: number | null = null;
 
         if (candles.length > 0) {
-          lastCandleDate = Math.floor(new Date(candles[candles.length - 1].timestamp).getTime() / 1000);
+          lastCandleDate = normalizeTimestamp(candles[candles.length - 1].timestamp);
         }
 
         for (const forecast of currentForecasts) {
           if (forecast.series.length > 0) {
             const lastPoint = forecast.series[forecast.series.length - 1];
-            const timestamp = Math.floor(new Date(lastPoint.timestamp).getTime() / 1000);
+            const timestamp = normalizeTimestamp(lastPoint.timestamp);
             if (maxForecastDate === null || timestamp > maxForecastDate) {
               maxForecastDate = timestamp;
             }

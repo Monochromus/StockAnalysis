@@ -246,8 +246,9 @@ export class IndicatorOverlayPrimitive implements ISeriesPrimitive<Time> {
       const p1 = data[i];
       const p2 = data[i + 1];
 
-      const t1 = Math.floor(new Date(p1.timestamp).getTime() / 1000);
-      const t2 = Math.floor(new Date(p2.timestamp).getTime() / 1000);
+      // Normalize timestamps to UTC midnight for consistency across timezones
+      const t1 = Math.floor(new Date(p1.timestamp.substring(0, 10) + 'T00:00:00Z').getTime() / 1000);
+      const t2 = Math.floor(new Date(p2.timestamp.substring(0, 10) + 'T00:00:00Z').getTime() / 1000);
 
       const x1 = timeScale.timeToCoordinate(t1 as Time);
       const x2 = timeScale.timeToCoordinate(t2 as Time);

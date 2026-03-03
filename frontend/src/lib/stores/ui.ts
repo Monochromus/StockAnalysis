@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { ModuleId } from './modules';
+import type { ViewMode } from '$lib/types';
 
 interface UIState {
   headerVisible: boolean;
@@ -7,6 +8,7 @@ interface UIState {
   sidebarVisible: boolean;
   footerVisible: boolean;
   activeSidebar: ModuleId | null;
+  viewMode: ViewMode;
 }
 
 const defaultState: UIState = {
@@ -15,6 +17,7 @@ const defaultState: UIState = {
   sidebarVisible: true,
   footerVisible: false,
   activeSidebar: null,
+  viewMode: 'chart',
 };
 
 function createUIStore() {
@@ -39,22 +42,24 @@ function createUIStore() {
     hideFooter: () => update((state) => ({ ...state, footerVisible: false })),
 
     hideAllOverlays: () =>
-      set({
+      update((state) => ({
+        ...state,
         headerVisible: false,
         toolbarVisible: false,
         sidebarVisible: false,
         footerVisible: false,
         activeSidebar: null,
-      }),
+      })),
 
     showAllOverlays: () =>
-      set({
+      update((state) => ({
+        ...state,
         headerVisible: true,
         toolbarVisible: true,
         sidebarVisible: true,
         footerVisible: false, // Footer remains hidden by default
         activeSidebar: null,
-      }),
+      })),
 
     resetToDefaults: () => set(defaultState),
 
@@ -67,6 +72,18 @@ function createUIStore() {
         ...state,
         activeSidebar: state.activeSidebar === sidebar ? null : sidebar,
       })),
+
+    // View mode management
+    setViewMode: (mode: ViewMode) =>
+      update((state) => ({ ...state, viewMode: mode })),
+
+    toggleViewMode: () =>
+      update((state) => {
+        const modes: ViewMode[] = ['chart', 'calendar', 'news'];
+        const currentIndex = modes.indexOf(state.viewMode);
+        const nextIndex = (currentIndex + 1) % modes.length;
+        return { ...state, viewMode: modes[nextIndex] };
+      }),
   };
 }
 

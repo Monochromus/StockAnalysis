@@ -20,22 +20,27 @@ import type {
 } from 'lightweight-charts';
 import type { ProphetForecastSeries, ProphetHorizonToggles } from '$lib/types';
 
-// Horizon colors
+// Horizon colors - confidence bands are kept subtle to not obscure price action
 const HORIZON_COLORS = {
   long_term: {
     line: '#1f77b4',        // Blue
-    fill: 'rgba(31, 119, 180, 0.15)',
-    border: 'rgba(31, 119, 180, 0.4)',
+    fill: 'rgba(31, 119, 180, 0.06)',   // Very subtle fill
+    border: 'rgba(31, 119, 180, 0.25)', // Softer border
   },
   mid_term: {
     line: '#2ca02c',        // Green
-    fill: 'rgba(44, 160, 44, 0.15)',
-    border: 'rgba(44, 160, 44, 0.4)',
+    fill: 'rgba(44, 160, 44, 0.06)',
+    border: 'rgba(44, 160, 44, 0.25)',
   },
   short_term: {
     line: '#d62728',        // Red
-    fill: 'rgba(214, 39, 40, 0.15)',
-    border: 'rgba(214, 39, 40, 0.4)',
+    fill: 'rgba(214, 39, 40, 0.06)',
+    border: 'rgba(214, 39, 40, 0.25)',
+  },
+  combined: {
+    line: '#8B7355',        // Calm brown - XGBoost combined forecast
+    fill: 'rgba(139, 115, 85, 0.12)',   // Slightly more visible for confidence
+    border: 'rgba(139, 115, 85, 0.35)',
   },
 };
 
@@ -280,9 +285,11 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
   }
 
   private _normalizeTimestamp(timestamp: string): number {
-    // Timestamp should now be in ISO 8601 format with timezone (e.g., "2025-02-28T00:00:00+00:00")
-    // Just parse it directly - JavaScript will handle the timezone conversion
-    return Math.floor(new Date(timestamp).getTime() / 1000);
+    // Normalize timestamp to UTC midnight for consistent comparison
+    // Handles both "2026-03-02" (date only) and "2026-03-02T00:00:00-05:00" (with timezone)
+    // Extract just the date part (YYYY-MM-DD) and treat as UTC midnight
+    const dateOnly = timestamp.substring(0, 10); // "YYYY-MM-DD"
+    return Math.floor(new Date(dateOnly + 'T00:00:00Z').getTime() / 1000);
   }
 
   private _convertToSegments(
@@ -364,7 +371,8 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
     if (!this._historicalEndDate || !this._chart) return null;
 
     const timeScale = this._chart.timeScale();
-    const timestamp = Math.floor(new Date(this._historicalEndDate).getTime() / 1000);
+    // Use the same normalization as _normalizeTimestamp for consistency
+    const timestamp = this._normalizeTimestamp(this._historicalEndDate);
     const x = timeScale.timeToCoordinate(timestamp as Time);
 
     // If native method returns a coordinate, use it
@@ -385,10 +393,13 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
     });
 
     for (const forecast of this._forecasts) {
-      const horizon = forecast.horizon as keyof ProphetHorizonToggles;
+      const horizon = forecast.horizon;
 
-      // Skip if toggle is off
-      if (!this._toggles[horizon]) continue;
+      // Skip if toggle is off (except for "combined" which is always shown)
+      if (horizon !== 'combined') {
+        const toggleKey = horizon as keyof ProphetHorizonToggles;
+        if (!this._toggles[toggleKey]) continue;
+      }
 
       // Get color scheme
       const colors = HORIZON_COLORS[horizon as keyof typeof HORIZON_COLORS];

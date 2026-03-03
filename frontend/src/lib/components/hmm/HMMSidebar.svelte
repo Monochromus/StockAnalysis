@@ -22,6 +22,7 @@
     hmmOptimization,
     strategyOptimization,
     symbol = null,
+    showTradeMarkers = false,
     isModelTrained = false,
     loading = false,
     trainingLoading = false,
@@ -40,6 +41,7 @@
     onStartHMMOptimization,
     onStartStrategyOptimization,
     onCancelOptimization,
+    onToggleTradeMarkers,
     onReanalyze,
     isActive = false,
     onToggle,
@@ -58,6 +60,7 @@
     hmmOptimization: OptimizationState;
     strategyOptimization: OptimizationState;
     symbol?: string | null;
+    showTradeMarkers?: boolean;
     isModelTrained?: boolean;
     loading?: boolean;
     trainingLoading?: boolean;
@@ -76,6 +79,7 @@
     onStartHMMOptimization: () => void;
     onStartStrategyOptimization: () => void;
     onCancelOptimization: (type: 'hmm' | 'strategy') => void;
+    onToggleTradeMarkers: () => void;
     onReanalyze: () => void;
     isActive?: boolean;
     onToggle: () => void;
@@ -266,6 +270,7 @@
             {hmmOptimization}
             {strategyOptimization}
             {symbol}
+            {showTradeMarkers}
             {onUpdateSettings}
             {onUpdateStrategyParams}
             {onUpdateBacktestSettings}
@@ -276,6 +281,7 @@
             {onStartHMMOptimization}
             {onStartStrategyOptimization}
             {onCancelOptimization}
+            {onToggleTradeMarkers}
           />
           <!-- Apply Button -->
           <div class="px-3 pb-3">

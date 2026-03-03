@@ -1056,5 +1056,247 @@ export const DEFAULT_PROPHET_SETTINGS: ProphetSettings = {
   yearly_seasonality: true,
   weekly_seasonality: true,
   changepoint_prior_scale: 0.05,
-  interval_width: 0.95,
+  interval_width: 0.80,  // 80% confidence interval
 };
+
+// ============== XGBoost Types ==============
+
+export interface XGBoostSettings {
+  n_estimators: number;
+  max_depth: number;
+  learning_rate: number;
+  subsample: number;
+  colsample_bytree: number;
+  min_child_weight: number;
+  reg_alpha: number;
+  reg_lambda: number;
+}
+
+export const DEFAULT_XGBOOST_SETTINGS: XGBoostSettings = {
+  n_estimators: 500,
+  max_depth: 4,
+  learning_rate: 0.05,
+  subsample: 0.8,
+  colsample_bytree: 0.8,
+  min_child_weight: 5,
+  reg_alpha: 0.1,
+  reg_lambda: 1.0,
+};
+
+export interface XGBoostFeatureToggles {
+  use_time_features: boolean;
+  use_lag_features: boolean;
+  use_rolling_features: boolean;
+  use_prophet_components: boolean;
+  use_market_structure: boolean;
+}
+
+export const DEFAULT_XGBOOST_FEATURE_TOGGLES: XGBoostFeatureToggles = {
+  use_time_features: true,
+  use_lag_features: true,
+  use_rolling_features: true,
+  use_prophet_components: true,
+  use_market_structure: true,
+};
+
+export interface XGBoostMetrics {
+  // Prophet-only metrics
+  prophet_mae: number;
+  prophet_rmse: number;
+  prophet_mape: number;
+  prophet_r2: number;
+  // Hybrid metrics
+  hybrid_mae: number;
+  hybrid_rmse: number;
+  hybrid_mape: number;
+  hybrid_r2: number;
+  // Improvement percentages
+  mae_improvement_pct: number;
+  rmse_improvement_pct: number;
+  mape_improvement_pct: number;
+  r2_improvement_pct: number;
+}
+
+export interface FeatureImportance {
+  feature_name: string;
+  importance: number;
+  rank: number;
+}
+
+export interface HybridForecastDataPoint {
+  timestamp: string;
+  prophet_value: number;
+  hybrid_value: number;
+  lower: number;
+  upper: number;
+  is_forecast: boolean;
+}
+
+export interface HybridForecastSeries {
+  horizon: string;
+  display_name: string;
+  color: string;
+  training_end_date: string;
+  forecast_start_date: string;
+  series: HybridForecastDataPoint[];
+}
+
+// XGBoost Request types
+export interface XGBoostAnalysisRequest {
+  symbol: string;
+  period?: string;
+  interval?: string;
+  forecast_periods?: number;
+  settings?: XGBoostSettings;
+  feature_toggles?: XGBoostFeatureToggles;
+  force_refresh?: boolean;
+}
+
+// XGBoost Response types
+export interface XGBoostAnalysisResponse {
+  symbol: string;
+  timestamp: string;
+  period: string;
+  interval: string;
+  forecast_periods: number;
+  hybrid_forecasts: HybridForecastSeries[];
+  metrics: XGBoostMetrics | null;
+  feature_importance: FeatureImportance[];
+  settings: XGBoostSettings;
+  feature_toggles: XGBoostFeatureToggles;
+  from_cache: boolean;
+  warning: string | null;
+}
+
+export interface XGBoostComparisonResponse {
+  symbol: string;
+  timestamp: string;
+  prophet_last_value: number;
+  prophet_forecast_30d: number | null;
+  prophet_forecast_90d: number | null;
+  hybrid_last_value: number;
+  hybrid_forecast_30d: number | null;
+  hybrid_forecast_90d: number | null;
+  metrics: XGBoostMetrics;
+  feature_importance: FeatureImportance[];
+  warning: string | null;
+}
+
+// ============== Seasonality Types ==============
+
+export interface MonthlyReturn {
+  month: number;  // 1-12
+  avg_return: number;
+  median_return: number;
+  std_dev: number;
+  positive_pct: number;  // 0-100
+  sample_size: number;
+}
+
+export interface DailySeasonality {
+  day_of_year: number;  // 1-366
+  month: number;  // 1-12
+  day: number;  // 1-31
+  value: number;  // Prophet yearly component
+  is_bullish: boolean;  // value > 0
+}
+
+export interface SeasonalityAnalysisRequest {
+  symbol: string;
+  period?: string;
+  interval?: string;
+}
+
+export interface SeasonalityAnalysisResponse {
+  symbol: string;
+  timestamp: string;
+  monthly_returns: MonthlyReturn[];
+  daily_seasonality: DailySeasonality[];
+  warning: string | null;
+}
+
+// Watchlist item stored in localStorage
+export interface WatchlistItem {
+  symbol: string;
+  name?: string;
+  addedAt: string;  // ISO timestamp
+}
+
+// View mode for switching between chart, calendar, and news
+export type ViewMode = 'chart' | 'calendar' | 'news';
+
+// ============== News Dashboard Types ==============
+
+export type MarketSentiment = 'bullish' | 'bearish' | 'neutral';
+export type ImpactLevel = 'high' | 'medium' | 'low';
+
+export interface SourceLink {
+  title: string;
+  url: string;
+  grounding_score: number | null;
+}
+
+export interface UpcomingEvent {
+  date: string;
+  description: string;
+  impact: ImpactLevel;
+  source: string | null;
+  grounding_score: number | null;
+}
+
+export interface MarketAssessment {
+  summary: string;
+  sentiment: MarketSentiment;
+  confidence: number;
+  key_factors: string[];
+}
+
+export interface SupplyDemandInfo {
+  supply_summary: string;
+  demand_summary: string;
+  balance_outlook: string;
+}
+
+export interface MacroFactors {
+  factors: string[];
+  summary: string;
+}
+
+export interface CommodityNewsAnalysis {
+  symbol: string;
+  commodity_name: string;
+  timestamp: string;
+  market_assessment: MarketAssessment;
+  news_summary: string;
+  news_highlights: string[];
+  supply_demand: SupplyDemandInfo | null;
+  macro_factors: MacroFactors | null;
+  upcoming_events: UpcomingEvent[];
+  sources: SourceLink[];
+  rendered_content: string | null;
+  from_cache: boolean;
+  cache_timestamp: string | null;
+}
+
+// News Request/Response types
+export interface NewsAnalysisResponse {
+  success: boolean;
+  analysis: CommodityNewsAnalysis | null;
+  error: string | null;
+}
+
+export interface NewsDashboardResponse {
+  success: boolean;
+  analyses: CommodityNewsAnalysis[];
+  errors: Record<string, string>;
+  timestamp: string;
+}
+
+export interface NewsStatusResponse {
+  available: boolean;
+  api_key_configured: boolean;
+  model_name: string;
+  cache_enabled: boolean;
+  cache_ttl_seconds: number;
+  error: string | null;
+}

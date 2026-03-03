@@ -1,9 +1,20 @@
 <script lang="ts">
-  import type { ProphetForecastSeries, ProphetHorizonSummary, ProphetComponentSeries, ProphetHorizonToggles, ProphetSettings } from '$lib/types';
+  import type {
+    ProphetForecastSeries,
+    ProphetHorizonSummary,
+    ProphetComponentSeries,
+    ProphetHorizonToggles,
+    ProphetSettings,
+    XGBoostSettings,
+    XGBoostFeatureToggles,
+    XGBoostMetrics,
+    FeatureImportance,
+  } from '$lib/types';
   import { ModuleActivateToggle } from '$lib/components/ui';
   import ProphetForecastStatus from './ProphetForecastStatus.svelte';
   import ProphetSettingsPanel from './ProphetSettingsPanel.svelte';
   import ProphetComponentWidget from './ProphetComponentWidget.svelte';
+  import XGBoostSettingsPanel from '$lib/components/xgboost/XGBoostSettingsPanel.svelte';
 
   let {
     priceSummaries = [],
@@ -26,6 +37,18 @@
     onFetchComponents,
     isActive = false,
     onToggle,
+    // XGBoost props
+    xgboostEnabled = false,
+    xgboostLoading = false,
+    xgboostSettings = null,
+    xgboostFeatureToggles = null,
+    xgboostMetrics = null,
+    xgboostFeatureImportance = [],
+    onToggleXGBoost = () => {},
+    onAnalyzeXGBoost = () => {},
+    onUpdateXGBoostSettings = () => {},
+    onUpdateXGBoostFeatureToggles = () => {},
+    onResetXGBoostSettings = () => {},
   }: {
     priceSummaries?: ProphetHorizonSummary[];
     components?: ProphetComponentSeries | null;
@@ -47,11 +70,24 @@
     onFetchComponents: (horizon: string) => void;
     isActive?: boolean;
     onToggle: () => void;
+    // XGBoost props
+    xgboostEnabled?: boolean;
+    xgboostLoading?: boolean;
+    xgboostSettings?: XGBoostSettings | null;
+    xgboostFeatureToggles?: XGBoostFeatureToggles | null;
+    xgboostMetrics?: XGBoostMetrics | null;
+    xgboostFeatureImportance?: FeatureImportance[];
+    onToggleXGBoost?: () => void;
+    onAnalyzeXGBoost?: () => void;
+    onUpdateXGBoostSettings?: (settings: Partial<XGBoostSettings>) => void;
+    onUpdateXGBoostFeatureToggles?: (toggles: Partial<XGBoostFeatureToggles>) => void;
+    onResetXGBoostSettings?: () => void;
   } = $props();
 
   // UI state
   let showSettings = $state(false);
   let showComponentsSection = $state(false);
+  let showXGBoostSection = $state(false);
 
   const hasForecasts = $derived(priceSummaries.length > 0);
 
@@ -106,12 +142,18 @@
 
   <!-- Scrollable Content -->
   <div class="flex-1 overflow-y-auto">
-    {#if loading}
+    {#if loading || xgboostLoading}
       <div class="flex items-center justify-center py-12">
         <div class="text-center">
-          <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-          <p class="text-xs text-text-muted">Prophet Training...</p>
-          <p class="text-xs text-text-muted mt-1">Dies kann einige Sekunden dauern</p>
+          {#if loading}
+            <div class="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+            <p class="text-xs text-text-muted">Prophet Training...</p>
+            <p class="text-xs text-text-muted mt-1">Dies kann einige Sekunden dauern</p>
+          {:else if xgboostLoading}
+            <div class="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+            <p class="text-xs text-text-muted">XGBoost Residual-Korrektur...</p>
+            <p class="text-xs text-text-muted mt-1">Feature-Engineering und Training</p>
+          {/if}
         </div>
       </div>
     {:else if !hasForecasts}
@@ -246,6 +288,59 @@
             >
               {loading ? 'Analysiere...' : 'Neu analysieren'}
             </button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- XGBoost Section -->
+      <div class="border-t border-stone-700/30">
+        <button
+          class="w-full p-3 flex items-center justify-between text-left hover:bg-stone-700/30 transition-all"
+          onclick={() => showXGBoostSection = !showXGBoostSection}
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-text-muted uppercase tracking-wide">XGBoost Residual-Korrektur</span>
+            {#if xgboostEnabled}
+              <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-emerald-500/20 text-emerald-400">AN</span>
+            {/if}
+          </div>
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={xgboostEnabled}
+              onchange={onToggleXGBoost}
+              onclick={(e) => e.stopPropagation()}
+              class="w-4 h-4 rounded border-stone-600 bg-stone-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-0"
+            />
+            <svg
+              class="w-4 h-4 text-text-muted transition-transform duration-200"
+              class:rotate-180={showXGBoostSection}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </button>
+
+        {#if showXGBoostSection && xgboostEnabled && xgboostSettings && xgboostFeatureToggles}
+          <XGBoostSettingsPanel
+            settings={xgboostSettings}
+            featureToggles={xgboostFeatureToggles}
+            metrics={xgboostMetrics}
+            featureImportance={xgboostFeatureImportance}
+            loading={xgboostLoading}
+            onUpdateSettings={onUpdateXGBoostSettings}
+            onUpdateFeatureToggles={onUpdateXGBoostFeatureToggles}
+            onResetSettings={onResetXGBoostSettings}
+            onAnalyze={onAnalyzeXGBoost}
+          />
+        {:else if showXGBoostSection && !xgboostEnabled}
+          <div class="px-3 pb-3">
+            <p class="text-xs text-text-muted">
+              Aktivieren Sie XGBoost um die Prophet-Prognose mit Residual-Korrektur zu verbessern.
+            </p>
           </div>
         {/if}
       </div>

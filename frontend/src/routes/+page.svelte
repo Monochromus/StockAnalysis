@@ -8,15 +8,21 @@
   import { AnalysisSidebar } from '$lib/components/analysis';
   import { HMMSidebar } from '$lib/components/hmm';
   import ProphetSidebar from '$lib/components/prophet/ProphetSidebar.svelte';
+  import { SeasonalityCalendarView } from '$lib/components/calendar';
+  import { WatchlistButton } from '$lib/components/watchlist';
+  import ViewToggle from '$lib/components/ui/ViewToggle.svelte';
+  import { NewsDashboard } from '$lib/components/news';
   import { tickerStore } from '$lib/stores/ticker';
   import { analysisStore, waveOverlayData } from '$lib/stores/analysis';
   import { hmmStore } from '$lib/stores/hmm';
   import { prophetStore, visiblePriceForecasts, trainingEndDate } from '$lib/stores/prophet';
+  import { xgboostStore, visibleHybridForecasts } from '$lib/stores/xgboost';
   import { modulesStore, type ModuleId } from '$lib/stores/modules';
   import { pinnedZonesStore } from '$lib/stores/pinnedZones';
   import { uiStore } from '$lib/stores/ui';
   import { subplotHeightsStore } from '$lib/stores/subplotHeights';
-  import type { IndicatorToggleState, ProphetHorizonToggles, ProphetSettings } from '$lib/types';
+  import { watchlistStore } from '$lib/stores/watchlist';
+  import type { IndicatorToggleState, ProphetHorizonToggles, ProphetSettings, XGBoostSettings, XGBoostFeatureToggles } from '$lib/types';
 
   let currentSymbol = $state('');
   let currentPeriod = $state('5y');
@@ -36,43 +42,26 @@
     // Clear pinned zones when switching to a different symbol
     if (symbol !== currentSymbol) {
       pinnedZonesStore.clearAllPinned();
+      // Clear XGBoost analysis data for the old symbol
+      xgboostStore.clearAnalysis();
     }
 
     currentSymbol = symbol;
 
-    // Enable all three modules by default when a new symbol is selected
-    modulesStore.setModules({ elliottWaves: true, hmm: true, prophet: true });
-    hmmStore.setHMMEnabled(true);
+    // Enable only Prophet by default - Elliott Waves and HMM are off
+    modulesStore.setModules({ elliottWaves: false, hmm: false, prophet: true });
+    hmmStore.setHMMEnabled(false);
 
     await loadData(symbol, currentPeriod, currentInterval);
 
-    // Run all three analysis modules in parallel
-    // Note: Each module uses its own period settings:
-    // - Elliott Waves: Uses its own settings (default 1y, 1d)
-    // - HMM: Uses its own settings (default 1y, 1d)
-    // - Prophet: Uses its own settings (default 5y, 1d) - matches loaded chart data
-    await Promise.all([
-      // Elliott Waves: Fetch pivots and select the last significant one for auto counting
-      // Uses analysisStore's own period setting (default 1y)
-      (async () => {
-        const response = await analysisStore.fetchPivots(symbol);
-        if (response?.pivots && response.pivots.length > 0) {
-          // Select the last significant pivot to trigger auto wave counting
-          const lastPivot = response.pivots[response.pivots.length - 1];
-          await analysisStore.selectStartPivot(lastPivot);
-        }
-      })(),
-
-      // HMM: Train and analyze with its own default parameters (1y, 1d)
-      (async () => {
-        await hmmStore.analyze(symbol);
-      })(),
-
-      // Prophet: Train and forecast with its own default parameters (5y, 1d)
-      (async () => {
-        await prophetStore.analyze(symbol);
-      })(),
-    ]);
+    // Run Prophet + XGBoost analysis
+    // Prophet uses its own settings (default 5y, 1d) - matches loaded chart data
+    // XGBoost runs automatically after Prophet for hybrid forecasting
+    await (async () => {
+      await prophetStore.analyze(symbol);
+      // Always run XGBoost after Prophet for hybrid forecasting
+      await xgboostStore.analyze(symbol, false, currentPeriod, currentInterval);
+    })();
   }
 
   async function handlePeriodChange(event: CustomEvent<string>) {
@@ -110,10 +99,13 @@
       }
 
       // Prophet: Re-run analysis - sync with chart period since it uses full data
+      // Then automatically run XGBoost if enabled
       if ($modulesStore.prophet) {
         analyses.push((async () => {
           prophetStore.updateSettings({ period, interval: currentInterval });
           await prophetStore.analyze(currentSymbol, true);
+          // Always run XGBoost after Prophet for hybrid forecasting
+          await xgboostStore.analyze(currentSymbol, true, period, currentInterval);
         })());
       }
 
@@ -158,10 +150,13 @@
       }
 
       // Prophet: Re-run analysis with new interval
+      // Then automatically run XGBoost if enabled
       if ($modulesStore.prophet) {
         analyses.push((async () => {
           prophetStore.updateSettings({ interval });
           await prophetStore.analyze(currentSymbol, true);
+          // Always run XGBoost after Prophet for hybrid forecasting
+          await xgboostStore.analyze(currentSymbol, true, currentPeriod, interval);
         })());
       }
 
@@ -244,9 +239,12 @@
       if (newState && currentSymbol) {
         // Analyze with Prophet's own settings (default 5y, 1d)
         await prophetStore.analyze(currentSymbol);
+        // Always run XGBoost after Prophet for hybrid forecasting
+        await xgboostStore.analyze(currentSymbol, false, currentPeriod, currentInterval);
       } else if (!newState) {
         // Clear analysis when disabled
         prophetStore.clearAnalysis();
+        xgboostStore.clearAnalysis();
       }
     }
   }
@@ -322,11 +320,18 @@
     hmmStore.cancelOptimization(type);
   }
 
+  function handleToggleTradeMarkers() {
+    hmmStore.toggleTradeMarkers();
+  }
+
   // Prophet specific handlers
   async function handleProphetAnalyze() {
     if (currentSymbol) {
       prophetStore.updateSettings({ period: currentPeriod, interval: currentInterval });
       await prophetStore.analyze(currentSymbol, true);
+
+      // Always run XGBoost after Prophet for hybrid forecasting
+      await xgboostStore.analyze(currentSymbol, true, currentPeriod, currentInterval);
     }
   }
 
@@ -354,6 +359,35 @@
     if (currentSymbol) {
       await prophetStore.fetchComponents(currentSymbol, horizon);
     }
+  }
+
+  // XGBoost specific handlers
+  async function handleToggleXGBoost() {
+    const wasEnabled = $xgboostStore.enabled;
+    xgboostStore.toggle();
+
+    // If enabling XGBoost and Prophet forecasts exist, run XGBoost analysis
+    if (!wasEnabled && currentSymbol && $prophetStore.priceForecasts.length > 0) {
+      await xgboostStore.analyze(currentSymbol, false, currentPeriod, currentInterval);
+    }
+  }
+
+  async function handleXGBoostAnalyze() {
+    if (currentSymbol && $xgboostStore.enabled) {
+      await xgboostStore.analyze(currentSymbol, true, currentPeriod, currentInterval);
+    }
+  }
+
+  function handleUpdateXGBoostSettings(settings: Partial<XGBoostSettings>) {
+    xgboostStore.updateSettings(settings);
+  }
+
+  function handleUpdateXGBoostFeatureToggles(toggles: Partial<XGBoostFeatureToggles>) {
+    xgboostStore.updateFeatureToggles(toggles);
+  }
+
+  function handleResetXGBoostSettings() {
+    xgboostStore.resetSettings();
   }
 
   // Chart visible range handler for subplot sync (using time-based range for accurate sync)
@@ -397,66 +431,189 @@
         ($hmmStore.indicatorToggles?.atr ? $subplotHeightsStore.atr : 0)
       : 0
   );
+
+  // Derived: Apply XGBoost corrections to Prophet forecasts when enabled
+  // When XGBoost is enabled, show a single combined forecast line (emerald green)
+  // XGBoost now includes both historical corrections AND future predictions
+  // The line is shifted so it meets the current price at the last candle date
+  let correctedPriceForecasts = $derived.by(() => {
+    // Access store values to establish reactivity
+    const xgboostState = $xgboostStore;
+    const prophetForecasts = $visiblePriceForecasts;
+    const candles = $tickerStore.candles;
+
+    const xgboostEnabled = xgboostState.enabled;
+    const hybridForecasts = xgboostState.hybridForecasts;
+    const xgboostLoading = xgboostState.loading;
+
+    // If XGBoost is not enabled, return original Prophet forecasts
+    if (!xgboostEnabled) {
+      return prophetForecasts;
+    }
+
+    // If XGBoost is loading, show Prophet forecasts while waiting
+    if (xgboostLoading) {
+      return prophetForecasts;
+    }
+
+    // If no hybrid data yet, return Prophet forecasts
+    if (!hybridForecasts || hybridForecasts.length === 0) {
+      return prophetForecasts;
+    }
+
+    // Get the combined hybrid forecast data
+    const hybridData = hybridForecasts[0];
+
+    if (!hybridData || !hybridData.series || hybridData.series.length === 0) {
+      return prophetForecasts;
+    }
+
+    // Get the current (last) actual price and date from candles
+    const lastCandle = candles.length > 0 ? candles[candles.length - 1] : null;
+    const currentPrice = lastCandle?.close ?? null;
+    const lastCandleDate = lastCandle?.timestamp?.substring(0, 10) ?? null;
+
+    // Find the hybrid point that matches the last candle date
+    let anchorPointIdx = -1;
+    if (lastCandleDate) {
+      anchorPointIdx = hybridData.series.findIndex(p =>
+        p.timestamp.substring(0, 10) === lastCandleDate
+      );
+    }
+
+    // If no exact match, find the closest point before the last candle date
+    if (anchorPointIdx === -1 && lastCandleDate) {
+      for (let i = hybridData.series.length - 1; i >= 0; i--) {
+        if (hybridData.series[i].timestamp.substring(0, 10) <= lastCandleDate) {
+          anchorPointIdx = i;
+          break;
+        }
+      }
+    }
+
+    // Calculate the offset to anchor line to current price
+    let priceOffset = 0;
+    if (currentPrice !== null && anchorPointIdx >= 0) {
+      const anchorValue = hybridData.series[anchorPointIdx].hybrid_value;
+      priceOffset = currentPrice - anchorValue;
+    }
+
+    // XGBoost now includes both historical AND future predictions
+    // Shift entire line by offset
+    const shiftedSeries = hybridData.series.map((point) => ({
+      timestamp: point.timestamp,
+      value: point.hybrid_value + priceOffset,
+      lower: point.lower + priceOffset,
+      upper: point.upper + priceOffset,
+      is_forecast: point.is_forecast,
+    }));
+
+    // Count future points for logging
+    const futureCount = shiftedSeries.filter(p => p.is_forecast).length;
+    console.log('[XGBoost] Hybrid forecast:', {
+      totalPoints: shiftedSeries.length,
+      futurePoints: futureCount,
+      priceOffset: priceOffset.toFixed(2),
+      trainingEnd: hybridData.training_end_date,
+      forecastStart: hybridData.forecast_start_date,
+    });
+
+    // Return a single combined forecast with calm brown color
+    return [{
+      horizon: 'combined',
+      display_name: 'Kombiniert (Prophet+XGBoost)',
+      color: '#8B7355',  // Calm brown
+      training_end_date: hybridData.training_end_date,
+      forecast_start_date: hybridData.forecast_start_date,
+      mape: null,
+      rmse: null,
+      series: shiftedSeries,
+    }];
+  });
 </script>
 
 <svelte:head>
-  <title>WaveSense Pro - Elliott Wave Analysis</title>
-  <meta name="description" content="Advanced Elliott Wave Analysis Tool" />
+  <title>CommodityCockpit - Saisonale Rohstoff-Analyse</title>
+  <meta name="description" content="Saisonale Rohstoff-Analyse mit Prophet + XGBoost" />
 </svelte:head>
 
 <!-- Root Container: Fixed fullscreen -->
 <div class="fixed inset-0 bg-bg-primary overflow-hidden">
-  <!-- CHART LAYER (z-0) - Always visible fullscreen background -->
-  <div class="absolute inset-0 z-0" style="bottom: {totalSubplotHeight}px">
-    <Chart
-      candles={$tickerStore.candles}
-      waves={$modulesStore.elliottWaves ? $waveOverlayData.waves : []}
-      pivots={visiblePivots}
-      riskReward={$modulesStore.elliottWaves ? $waveOverlayData.riskReward : null}
-      higherDegree={$modulesStore.elliottWaves ? $waveOverlayData.higherDegree : null}
-      projectedZones={$modulesStore.elliottWaves ? $waveOverlayData.projectedZones : []}
-      fibonacciLevels={$modulesStore.elliottWaves ? $waveOverlayData.fibonacciLevels : []}
-      selectedPivot={$modulesStore.elliottWaves ? $analysisStore.selectedStartPivot : null}
-      currentSymbol={currentSymbol}
-      onPivotSelected={handlePivotSelected}
-      onVisibleRangeChange={handleVisibleRangeChange}
-      manualPivotIndices={manualPivotIndices}
-      regimeData={$modulesStore.hmm ? $hmmStore.regimeSeries : []}
-      indicators={$modulesStore.hmm ? $hmmStore.indicators : null}
-      indicatorToggles={$modulesStore.hmm ? $hmmStore.indicatorToggles : null}
-      hmmEnabled={$modulesStore.hmm}
-      trades={$modulesStore.hmm && $hmmStore.backtestResult ? $hmmStore.backtestResult.trades : []}
-      prophetForecasts={$modulesStore.prophet ? $visiblePriceForecasts : []}
-      prophetHorizonToggles={$modulesStore.prophet ? $prophetStore.horizonToggles : null}
-      prophetEnabled={$modulesStore.prophet}
-      prophetTrainingEndDate={$modulesStore.prophet ? $trainingEndDate : null}
-    />
+  <!-- MAIN CONTENT LAYER (z-0) - Chart or Calendar View -->
+  {#if $uiStore.viewMode === 'chart'}
+    <!-- CHART LAYER - Standard chart view -->
+    <div class="absolute inset-0 z-0" style="bottom: {totalSubplotHeight}px">
+      <Chart
+        candles={$tickerStore.candles}
+        waves={$modulesStore.elliottWaves ? $waveOverlayData.waves : []}
+        pivots={visiblePivots}
+        riskReward={$modulesStore.elliottWaves ? $waveOverlayData.riskReward : null}
+        higherDegree={$modulesStore.elliottWaves ? $waveOverlayData.higherDegree : null}
+        projectedZones={$modulesStore.elliottWaves ? $waveOverlayData.projectedZones : []}
+        fibonacciLevels={$modulesStore.elliottWaves ? $waveOverlayData.fibonacciLevels : []}
+        selectedPivot={$modulesStore.elliottWaves ? $analysisStore.selectedStartPivot : null}
+        currentSymbol={currentSymbol}
+        onPivotSelected={handlePivotSelected}
+        onVisibleRangeChange={handleVisibleRangeChange}
+        manualPivotIndices={manualPivotIndices}
+        regimeData={$modulesStore.hmm ? $hmmStore.regimeSeries : []}
+        indicators={$modulesStore.hmm ? $hmmStore.indicators : null}
+        indicatorToggles={$modulesStore.hmm ? $hmmStore.indicatorToggles : null}
+        hmmEnabled={$modulesStore.hmm}
+        trades={$modulesStore.hmm && $hmmStore.backtestResult ? $hmmStore.backtestResult.trades : []}
+        showTradeMarkers={$hmmStore.showTradeMarkers}
+        prophetForecasts={$modulesStore.prophet ? correctedPriceForecasts : []}
+        prophetHorizonToggles={$modulesStore.prophet ? $prophetStore.horizonToggles : null}
+        prophetEnabled={$modulesStore.prophet}
+        prophetTrainingEndDate={$modulesStore.prophet ? $trainingEndDate : null}
+      />
 
-    <!-- Loading Overlay -->
-    {#if $tickerStore.loading}
-      <div class="absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
-        <div class="flex items-center gap-3">
-          <svg class="animate-spin h-8 w-8 text-amber-500" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span class="text-stone-400">Loading chart data...</span>
+      <!-- Loading Overlay -->
+      {#if $tickerStore.loading}
+        <div class="absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
+          <div class="flex items-center gap-3">
+            <svg class="animate-spin h-8 w-8 text-amber-500" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span class="text-stone-400">Loading chart data...</span>
+          </div>
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    <!-- Error Message -->
-    {#if $tickerStore.error && !$tickerStore.loading}
-      <div class="absolute bottom-4 left-4 z-20" style="right: {$uiStore.sidebarVisible ? '420px' : '1rem'}">
-        <div class="liquid-glass rounded-xl px-4 py-3 border-amber-500/40">
-          <p class="text-amber-500 text-sm">{$tickerStore.error}</p>
+      <!-- Error Message -->
+      {#if $tickerStore.error && !$tickerStore.loading}
+        <div class="absolute bottom-4 left-4 z-20" style="right: {$uiStore.sidebarVisible ? '420px' : '1rem'}">
+          <div class="liquid-glass rounded-xl px-4 py-3 border-amber-500/40">
+            <p class="text-amber-500 text-sm">{$tickerStore.error}</p>
+          </div>
         </div>
+      {/if}
+    </div>
+  {:else if $uiStore.viewMode === 'calendar'}
+    <!-- CALENDAR LAYER - Seasonality calendar view -->
+    {@const headerHeight = $uiStore.headerVisible ? 5.5 : 0}
+    {@const toolbarHeight = $uiStore.toolbarVisible ? 3.5 : 0}
+    {@const topOffset = headerHeight + toolbarHeight + ($uiStore.headerVisible || $uiStore.toolbarVisible ? 1.5 : 0)}
+    <div class="absolute z-0 overflow-hidden" style="top: {topOffset}rem; left: 1rem; right: {$uiStore.sidebarVisible && showAnySidebar ? '420px' : '1rem'}; bottom: 1rem;">
+      <div class="h-full bg-stone-900/50 rounded-xl overflow-hidden">
+        <SeasonalityCalendarView symbol={currentSymbol} />
       </div>
-    {/if}
-  </div>
+    </div>
+  {:else}
+    <!-- NEWS LAYER - News dashboard view -->
+    {@const headerHeight = $uiStore.headerVisible ? 5.5 : 0}
+    {@const toolbarHeight = $uiStore.toolbarVisible ? 3.5 : 0}
+    {@const topOffset = headerHeight + toolbarHeight + ($uiStore.headerVisible || $uiStore.toolbarVisible ? 1.5 : 0)}
+    <div class="absolute z-0 overflow-hidden" style="top: {topOffset}rem; left: 1rem; right: {$uiStore.sidebarVisible && showAnySidebar ? '420px' : '1rem'}; bottom: 1rem;">
+      <div class="h-full bg-stone-900/50 rounded-xl overflow-hidden">
+        <NewsDashboard />
+      </div>
+    </div>
+  {/if}
 
-  <!-- SUBPLOT LAYER (z-5) - HMM Indicator subplots at bottom -->
-  {#if $modulesStore.hmm && $hmmStore.indicators}
+  <!-- SUBPLOT LAYER (z-5) - HMM Indicator subplots at bottom (only in chart mode) -->
+  {#if $uiStore.viewMode === 'chart' && $modulesStore.hmm && $hmmStore.indicators}
     <div class="absolute bottom-0 left-0 z-5" style="right: {$uiStore.sidebarVisible ? '400px' : '0'}">
       {#if $hmmStore.indicatorToggles.rsi}
         <SubplotChart
@@ -502,15 +659,24 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
             <h1 class="text-xl font-bold text-stone-50">
-              <span class="text-amber-500">Wave</span>Sense Pro
+              <span class="text-amber-500">Commodity</span>Cockpit
+              <span class="ml-2 text-sm font-normal text-stone-400">Saisonale Rohstoff-Analyse</span>
             </h1>
             {#if currentSymbol}
               <span class="text-stone-500">|</span>
               <span class="text-lg font-semibold text-stone-50">{currentSymbol}</span>
+              <WatchlistButton symbol={currentSymbol} size="md" />
             {/if}
           </div>
-          <div class="w-96">
-            <TickerSearch on:select={handleTickerSelect} />
+          <div class="flex items-center gap-4">
+            <ViewToggle
+              viewMode={$uiStore.viewMode}
+              onToggle={() => uiStore.toggleViewMode()}
+              onSetMode={(mode) => uiStore.setViewMode(mode)}
+            />
+            <div class="w-96">
+              <TickerSearch on:select={handleTickerSelect} />
+            </div>
           </div>
         </div>
       </div>
@@ -562,6 +728,17 @@
           onFetchComponents={handleProphetFetchComponents}
           isActive={$modulesStore.prophet}
           onToggle={() => handleModuleActivate('prophet')}
+          xgboostEnabled={$xgboostStore.enabled}
+          xgboostLoading={$xgboostStore.loading}
+          xgboostSettings={$xgboostStore.settings}
+          xgboostFeatureToggles={$xgboostStore.featureToggles}
+          xgboostMetrics={$xgboostStore.metrics}
+          xgboostFeatureImportance={$xgboostStore.featureImportance}
+          onToggleXGBoost={handleToggleXGBoost}
+          onAnalyzeXGBoost={handleXGBoostAnalyze}
+          onUpdateXGBoostSettings={handleUpdateXGBoostSettings}
+          onUpdateXGBoostFeatureToggles={handleUpdateXGBoostFeatureToggles}
+          onResetXGBoostSettings={handleResetXGBoostSettings}
         />
       {:else if showHMMSidebar}
         <HMMSidebar
@@ -579,6 +756,7 @@
           hmmOptimization={$hmmStore.hmmOptimization}
           strategyOptimization={$hmmStore.strategyOptimization}
           symbol={currentSymbol || null}
+          showTradeMarkers={$hmmStore.showTradeMarkers}
           isModelTrained={$hmmStore.isModelTrained}
           loading={$hmmStore.loading}
           trainingLoading={$hmmStore.trainingLoading}
@@ -597,6 +775,7 @@
           onStartHMMOptimization={handleStartHMMOptimization}
           onStartStrategyOptimization={handleStartStrategyOptimization}
           onCancelOptimization={handleCancelOptimization}
+          onToggleTradeMarkers={handleToggleTradeMarkers}
           onReanalyze={handleReanalyzeHMM}
           isActive={$modulesStore.hmm}
           onToggle={() => handleModuleActivate('hmm')}
@@ -615,7 +794,7 @@
     <footer class="fixed bottom-0 left-4 mb-4 z-20 liquid-glass rounded-xl animate-liquid-slide-bottom" style="right: {$uiStore.sidebarVisible && showAnySidebar ? '420px' : '1rem'}">
       <div class="px-6 py-3">
         <div class="flex items-center justify-between text-xs text-stone-500">
-          <span>WaveSense Pro - Elliott Wave Analysis Tool</span>
+          <span>CommodityCockpit v1.0 – Prophet + XGBoost</span>
           <div class="flex items-center gap-4">
             <span>Powered by TradingView Lightweight Charts</span>
             {#if $tickerStore.provider}
@@ -636,7 +815,7 @@
   {/if}
 
   <!-- CONTROL LAYER (z-30) - Toggle Buttons -->
-  <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2" style="bottom: {totalSubplotHeight + 24}px">
+  <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2" style="bottom: {$uiStore.viewMode === 'chart' ? totalSubplotHeight + 24 : 24}px">
     <div class="liquid-glass-intense rounded-full px-2 py-1.5 flex items-center gap-1">
       <!-- Header Toggle -->
       <button

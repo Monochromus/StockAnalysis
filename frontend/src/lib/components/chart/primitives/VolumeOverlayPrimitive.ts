@@ -169,7 +169,9 @@ export class VolumeOverlayPrimitive implements ISeriesPrimitive<Time> {
 
     for (let i = 0; i < this._candles.length; i++) {
       const candle = this._candles[i];
-      const time = Math.floor(new Date(candle.timestamp).getTime() / 1000);
+      // Normalize timestamp to UTC midnight for consistency across timezones
+      const dateOnly = candle.timestamp.substring(0, 10);
+      const time = Math.floor(new Date(dateOnly + 'T00:00:00Z').getTime() / 1000);
       const x = timeScale.timeToCoordinate(time as Time);
 
       if (x === null) continue;

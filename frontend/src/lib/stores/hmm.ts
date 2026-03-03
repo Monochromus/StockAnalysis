@@ -53,6 +53,7 @@ interface HMMState {
   indicatorToggles: IndicatorToggleState;
   hmmEnabled: boolean;
   isModelTrained: boolean;
+  showTradeMarkers: boolean;
 
   // Loading states
   loading: boolean;
@@ -137,6 +138,7 @@ const initialState: HMMState = {
   indicatorToggles: { ...defaultIndicatorToggles },
   hmmEnabled: false,
   isModelTrained: false,
+  showTradeMarkers: false,
 
   loading: false,
   trainingLoading: false,
@@ -217,6 +219,17 @@ function createHMMStore() {
       update((state) => ({
         ...state,
         hmmEnabled: enabled,
+      }));
+    },
+
+    /**
+     * Toggle trade markers visibility.
+     */
+    toggleTradeMarkers() {
+      log('Trade markers toggled');
+      update((state) => ({
+        ...state,
+        showTradeMarkers: !state.showTradeMarkers,
       }));
     },
 

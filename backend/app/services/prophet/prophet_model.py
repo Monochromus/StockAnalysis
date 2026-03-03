@@ -348,6 +348,119 @@ class ProphetForecaster:
             yearly=yearly_data,
         )
 
+    def combine_forecasts(
+        self,
+        forecasts: Dict[str, ForecastResult],
+        weights: Optional[Dict[str, float]] = None
+    ) -> ForecastResult:
+        """
+        Combine multiple horizon forecasts into a single weighted forecast.
+
+        Effects that appear consistently across all horizons get more weight,
+        while effects that only appear in short-term get diluted.
+
+        Weights are based on years of training data:
+        - long_term: 5 years → weight 5
+        - mid_term: 2 years → weight 2
+        - short_term: 0.5 years → weight 0.5
+
+        Args:
+            forecasts: Dict mapping horizon names to ForecastResults
+            weights: Optional custom weights, defaults to data-based weights
+
+        Returns:
+            Combined ForecastResult with weighted average predictions
+        """
+        # Default weights based on years of training data
+        if weights is None:
+            weights = {
+                "long_term": 5.0,    # 5 years of data
+                "mid_term": 2.0,     # 2 years of data
+                "short_term": 0.5,   # 6 months of data
+            }
+
+        # Get all forecast DataFrames
+        dfs = {}
+        for horizon_name, result in forecasts.items():
+            if horizon_name in weights:
+                df = result.forecast_df.copy()
+                df["_horizon"] = horizon_name
+                dfs[horizon_name] = df
+
+        if not dfs:
+            raise ValueError("No valid forecasts to combine")
+
+        # Start with long_term as base (has most dates)
+        base_df = dfs.get("long_term", list(dfs.values())[0]).copy()
+        combined = base_df[["ds"]].copy()
+
+        # Columns to combine with weighted average
+        value_cols = ["yhat", "yhat_lower", "yhat_upper", "trend"]
+
+        # Add seasonal columns if they exist
+        for col in ["yearly", "weekly", "monthly"]:
+            if col in base_df.columns:
+                value_cols.append(col)
+
+        for col in value_cols:
+            if col not in base_df.columns:
+                continue
+
+            # Initialize weighted sum and weight sum
+            combined[f"{col}_weighted_sum"] = 0.0
+            combined[f"{col}_weight_sum"] = 0.0
+
+            for horizon_name, df in dfs.items():
+                if col not in df.columns:
+                    continue
+
+                w = weights.get(horizon_name, 1.0)
+
+                # Merge by date
+                horizon_vals = df[["ds", col]].copy()
+                horizon_vals = horizon_vals.rename(columns={col: f"{col}_{horizon_name}"})
+
+                combined = combined.merge(horizon_vals, on="ds", how="left")
+
+                # Add to weighted sum where values exist
+                mask = combined[f"{col}_{horizon_name}"].notna()
+                combined.loc[mask, f"{col}_weighted_sum"] += (
+                    combined.loc[mask, f"{col}_{horizon_name}"] * w
+                )
+                combined.loc[mask, f"{col}_weight_sum"] += w
+
+                # Drop temporary column
+                combined = combined.drop(columns=[f"{col}_{horizon_name}"])
+
+            # Calculate weighted average
+            combined[col] = combined[f"{col}_weighted_sum"] / combined[f"{col}_weight_sum"]
+            combined = combined.drop(columns=[f"{col}_weighted_sum", f"{col}_weight_sum"])
+
+        # Ensure ds column is datetime type (required for XGBoost date extraction)
+        if not pd.api.types.is_datetime64_any_dtype(combined["ds"]):
+            combined["ds"] = pd.to_datetime(combined["ds"])
+
+        # Drop rows with NaN in yhat (can happen if horizons don't overlap fully)
+        combined = combined.dropna(subset=["yhat"])
+
+        # Use long_term dates for metadata
+        long_term = forecasts.get("long_term", list(forecasts.values())[0])
+
+        logger.info(
+            f"Combined {len(forecasts)} horizon forecasts with weights: {weights}, "
+            f"result has {len(combined)} rows"
+        )
+
+        return ForecastResult(
+            horizon="combined",
+            forecast_df=combined,
+            model=long_term.model,  # Use long_term model for components
+            training_end_date=long_term.training_end_date,
+            forecast_start_date=long_term.forecast_start_date,
+            mape=long_term.mape,  # Could calculate combined MAPE
+            rmse=long_term.rmse,
+        )
+
     def to_chart_format(
         self,
         forecast_result: ForecastResult,

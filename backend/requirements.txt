@@ -19,3 +19,5 @@ pomegranate>=1.1.0  # For Bayesian HMM
 optuna>=3.0.0  # For Bayesian parameter optimization
 # Prophet for time series forecasting
 prophet>=1.1.5
+# Gemini API for News Dashboard
+google-genai>=0.4.0

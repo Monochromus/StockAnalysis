@@ -15,6 +15,7 @@
     hmmOptimization,
     strategyOptimization,
     symbol,
+    showTradeMarkers = false,
     onUpdateSettings,
     onUpdateStrategyParams,
     onUpdateBacktestSettings,
@@ -25,6 +26,7 @@
     onStartHMMOptimization,
     onStartStrategyOptimization,
     onCancelOptimization,
+    onToggleTradeMarkers,
   }: {
     settings: {
       nStates: number;
@@ -53,6 +55,7 @@
     hmmOptimization: OptimizationState;
     strategyOptimization: OptimizationState;
     symbol: string | null;
+    showTradeMarkers?: boolean;
     onUpdateSettings: (settings: { nStates?: number; nIter?: number; period?: string; interval?: string }) => void;
     onUpdateStrategyParams: (params: Partial<StrategyParams>) => void;
     onUpdateBacktestSettings: (settings: { leverage?: number; slippagePct?: number; commissionPct?: number; initialCapital?: number }) => void;
@@ -63,6 +66,7 @@
     onStartHMMOptimization: () => void;
     onStartStrategyOptimization: () => void;
     onCancelOptimization: (type: 'hmm' | 'strategy') => void;
+    onToggleTradeMarkers: () => void;
   } = $props();
 
   // Section toggles
@@ -918,6 +922,20 @@
 
     {#if showBacktestParams}
       <div class="px-3 pb-3 space-y-3">
+        <!-- Trade Markers Toggle -->
+        <label class="flex items-center justify-between cursor-pointer">
+          <span class="text-xs text-text-muted">Trade-Marker anzeigen</span>
+          <div class="relative">
+            <input
+              type="checkbox"
+              checked={showTradeMarkers}
+              onchange={onToggleTradeMarkers}
+              class="sr-only peer"
+            />
+            <div class="w-9 h-5 bg-stone-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-stone-400 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500 peer-checked:after:bg-white"></div>
+          </div>
+        </label>
+
         <!-- Initial Capital -->
         <div>
           <label class="block text-xs text-text-muted mb-1">Startkapital ($)</label>

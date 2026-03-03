@@ -27,6 +27,8 @@
     { value: '1y', label: '1Y' },
     { value: '2y', label: '2Y' },
     { value: '5y', label: '5Y' },
+    { value: '10y', label: '10Y' },
+    { value: 'max', label: 'MAX' },
   ];
 
   const intervals = [

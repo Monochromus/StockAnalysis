@@ -76,3 +76,13 @@ class ForecastHorizon:
                 color="#d62728"  # Red
             ),
         ]
+
+    @classmethod
+    def get_combined(cls) -> "ForecastHorizon":
+        """Get combined horizon configuration for XGBoost hybrid forecasts."""
+        return cls(
+            name="combined",
+            display_name="Kombiniert (Prophet+XGBoost)",
+            data_fraction=1.0,
+            color="#10b981"  # Emerald green
+        )

@@ -8,7 +8,7 @@ settings = get_settings()
 
 app = FastAPI(
     title=settings.app_name,
-    description="Advanced Elliott Wave Analysis Tool",
+    description="Saisonale Rohstoff-Analyse mit Prophet + XGBoost",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
