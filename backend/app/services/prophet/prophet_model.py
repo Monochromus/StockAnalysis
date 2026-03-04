@@ -461,6 +461,84 @@ class ProphetForecaster:
             rmse=long_term.rmse,
         )
 
+    def backtest_forecast(
+        self,
+        df: pd.DataFrame,
+        cutoff_date: str,
+        periods: int = 365
+    ) -> Tuple[ForecastResult, pd.DataFrame]:
+        """
+        Backtest: Train Prophet ONLY on data BEFORE cutoff_date.
+
+        CRITICAL: Strict data isolation - NO data leak!
+        The model must not see any data on or after the cutoff date.
+
+        Args:
+            df: OHLCV DataFrame with datetime index
+            cutoff_date: String date (YYYY-MM-DD) - training ends BEFORE this date
+            periods: Number of days to forecast from cutoff
+
+        Returns:
+            Tuple of (ForecastResult, full_df) where full_df includes actual data
+            for comparison
+        """
+        cutoff = pd.to_datetime(cutoff_date)
+
+        # STRICT: Only data BEFORE cutoff (not <=)
+        train_data = df[df.index < cutoff].copy()
+
+        if len(train_data) < 30:
+            raise ValueError(
+                f"Insufficient training data before {cutoff_date}. "
+                f"Need at least 30 data points, got {len(train_data)}."
+            )
+
+        logger.info(
+            f"Backtest training: {len(train_data)} days before {cutoff_date}, "
+            f"forecasting {periods} days"
+        )
+
+        # Prepare price data for Prophet
+        indicators = ProphetIndicators(train_data)
+        price_df = indicators.prepare_price_data()
+
+        # Create and fit Prophet model
+        model = self._create_prophet_model()
+
+        # Handle cap/floor for logistic growth
+        if self.config.growth == "logistic":
+            if self.config.cap is not None:
+                price_df["cap"] = self.config.cap
+            if self.config.floor is not None:
+                price_df["floor"] = self.config.floor
+
+        model.fit(price_df)
+
+        # Create future dataframe starting from cutoff
+        future = model.make_future_dataframe(periods=periods, freq="D")
+
+        if self.config.growth == "logistic":
+            if self.config.cap is not None:
+                future["cap"] = self.config.cap
+            if self.config.floor is not None:
+                future["floor"] = self.config.floor
+
+        # Generate forecast
+        forecast = model.predict(future)
+
+        # Get date boundaries
+        training_end_date = train_data.index.max().strftime("%Y-%m-%d")
+
+        return ForecastResult(
+            horizon="backtest",
+            forecast_df=forecast,
+            model=model,
+            training_end_date=training_end_date,
+            forecast_start_date=cutoff_date,
+            mape=None,  # Will be calculated externally
+            rmse=None,
+        ), df
+
     def to_chart_format(
         self,
         forecast_result: ForecastResult,

@@ -43,6 +43,10 @@
     prophetHorizonToggles = null,
     prophetEnabled = false,
     prophetTrainingEndDate = null,
+    // Backtest props
+    prophetBacktestMode = false,
+    prophetBacktestCutoffDate = null,
+    prophetBacktestTodayDate = null,
   }: {
     candles: Candle[];
     waves: (Wave & { color: string })[];
@@ -70,6 +74,10 @@
     prophetHorizonToggles?: ProphetHorizonToggles | null;
     prophetEnabled?: boolean;
     prophetTrainingEndDate?: string | null;
+    // Backtest props
+    prophetBacktestMode?: boolean;
+    prophetBacktestCutoffDate?: string | null;
+    prophetBacktestTodayDate?: string | null;
   } = $props();
 
   let chartContainer: HTMLDivElement;
@@ -694,6 +702,9 @@
     const currentToggles = prophetHorizonToggles;
     const currentProphetEnabled = prophetEnabled;
     const currentTrainingEndDate = prophetTrainingEndDate;
+    const currentBacktestMode = prophetBacktestMode;
+    const currentBacktestCutoffDate = prophetBacktestCutoffDate;
+    const currentBacktestTodayDate = prophetBacktestTodayDate;
     const isReady = chartReady;
 
     log('Prophet effect', {
@@ -702,9 +713,17 @@
       isReady,
       hasPrimitive: !!prophetForecastPrimitive,
       trainingEndDate: currentTrainingEndDate,
+      backtestMode: currentBacktestMode,
     });
 
     if (prophetForecastPrimitive && isReady && chart) {
+      // Handle backtest mode
+      if (currentBacktestMode && currentBacktestCutoffDate && currentBacktestTodayDate) {
+        prophetForecastPrimitive.setBacktestMode(true, currentBacktestCutoffDate, currentBacktestTodayDate);
+      } else {
+        prophetForecastPrimitive.clearBacktestMode();
+      }
+
       if (currentProphetEnabled && currentForecasts.length > 0) {
         log('Setting Prophet forecasts', {
           horizons: currentForecasts.map(f => f.horizon),

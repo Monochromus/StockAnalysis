@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+import pandas as pd
 
 from app.services.data_provider import DataProvider, get_data_provider
 from app.services.prophet import (
@@ -12,6 +13,7 @@ from app.services.prophet import (
     ForecastHorizon,
     get_prophet_cache,
     ProphetCache,
+    calculate_backtest_metrics,
 )
 from app.schemas.prophet import (
     ProphetAnalysisRequest,
@@ -27,6 +29,10 @@ from app.schemas.prophet import (
     ComponentDataPoint,
     ProphetHorizonSummary,
     ProphetForecastMetrics,
+    ProphetBacktestRequest,
+    ProphetBacktestResponse,
+    ProphetBacktestMetrics,
+    BacktestDataPoint,
 )
 
 router = APIRouter()
@@ -449,5 +455,218 @@ async def get_components(
         symbol=symbol.upper(),
         horizon=horizon,
         components=component_series,
+        warning=warning,
+    )
+
+
+@router.post("/backtest", response_model=ProphetBacktestResponse)
+async def backtest_prophet(
+    request: ProphetBacktestRequest,
+    data_provider: DataProvider = Depends(get_data_provider),
+):
+    """
+    Prophet Backtest: Train on data BEFORE cutoff_date, then compare forecast
+    to actual prices.
+
+    CRITICAL: NO data after cutoff_date is used for training!
+    This allows validating Prophet's predictive accuracy on historical data.
+    """
+    # Validate cutoff date
+    try:
+        cutoff_dt = datetime.strptime(request.cutoff_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="cutoff_date must be in YYYY-MM-DD format"
+        )
+
+    today = datetime.utcnow().date()
+    if cutoff_dt.date() >= today:
+        raise HTTPException(
+            status_code=400,
+            detail="cutoff_date must be in the past"
+        )
+
+    # Fetch market data
+    ohlcv_data, warning = data_provider.get_ohlcv(
+        request.symbol,
+        period=request.period,
+        interval=request.interval,
+    )
+
+    if not ohlcv_data.candles:
+        raise HTTPException(status_code=404, detail="No data available for symbol")
+
+    # Convert to DataFrame
+    df, data_tz = _candles_to_dataframe(ohlcv_data.candles)
+
+    # Check if we have data before cutoff
+    if df.index.min() >= pd.Timestamp(cutoff_dt):
+        raise HTTPException(
+            status_code=400,
+            detail=f"No data available before cutoff_date {request.cutoff_date}"
+        )
+
+    # Create Prophet config
+    config = ProphetConfig(
+        yearly_seasonality=request.yearly_seasonality,
+        weekly_seasonality=request.weekly_seasonality,
+        changepoint_prior_scale=request.changepoint_prior_scale,
+        interval_width=request.interval_width,
+    )
+
+    # Create forecaster and run backtest
+    forecaster = ProphetForecaster(config=config)
+
+    try:
+        result, full_df = forecaster.backtest_forecast(
+            df, request.cutoff_date, request.forecast_periods
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prophet backtest failed: {str(e)}"
+        )
+
+    # Get actual prices after cutoff for comparison
+    cutoff_ts = pd.Timestamp(cutoff_dt)
+    actual_df = full_df[full_df.index >= cutoff_ts].copy()
+
+    # Get forecast data
+    forecast_df = result.forecast_df.copy()
+    forecast_df["ds"] = pd.to_datetime(forecast_df["ds"])
+    forecast_df = forecast_df.set_index("ds")
+
+    # Calculate metrics - compare actual vs forecast
+    actual_series = actual_df["Close"]
+    forecast_series = forecast_df["yhat"]
+
+    metrics_dict = calculate_backtest_metrics(actual_series, forecast_series)
+
+    metrics = ProphetBacktestMetrics(
+        mape=metrics_dict["mape"],
+        rmse=metrics_dict["rmse"],
+        mae=metrics_dict["mae"],
+        correlation=metrics_dict["correlation"],
+        r_squared=metrics_dict["r_squared"],
+        direction_accuracy=metrics_dict["direction_accuracy"],
+        days_forecasted=metrics_dict["days_forecasted"],
+        days_with_actual=metrics_dict["days_with_actual"],
+    )
+
+    # Create comparison data points
+    comparison_data = []
+    common_idx = actual_series.index.intersection(forecast_series.index)
+
+    for idx in common_idx:
+        actual_val = float(actual_series.loc[idx])
+        forecast_val = float(forecast_series.loc[idx])
+        lower_val = float(forecast_df.loc[idx, "yhat_lower"])
+        upper_val = float(forecast_df.loc[idx, "yhat_upper"])
+        error = actual_val - forecast_val
+        error_pct = (error / actual_val * 100) if actual_val != 0 else 0
+
+        # Format timestamp
+        if data_tz is not None:
+            if idx.tzinfo is None:
+                if hasattr(data_tz, 'localize'):
+                    ts = data_tz.localize(idx)
+                else:
+                    ts = idx.replace(tzinfo=data_tz)
+            else:
+                ts = idx
+            ts_str = ts.isoformat()
+        else:
+            ts_str = idx.strftime("%Y-%m-%dT00:00:00+00:00")
+
+        comparison_data.append(BacktestDataPoint(
+            timestamp=ts_str,
+            actual=actual_val,
+            forecast=forecast_val,
+            lower=lower_val,
+            upper=upper_val,
+            error=round(error, 4),
+            error_pct=round(error_pct, 4),
+        ))
+
+    # Create actual prices series for response
+    actual_prices = []
+    for idx, row in actual_df.iterrows():
+        if data_tz is not None:
+            if idx.tzinfo is None:
+                if hasattr(data_tz, 'localize'):
+                    ts = data_tz.localize(idx)
+                else:
+                    ts = idx.replace(tzinfo=data_tz)
+            else:
+                ts = idx
+            ts_str = ts.isoformat()
+        else:
+            ts_str = idx.strftime("%Y-%m-%dT00:00:00+00:00")
+
+        actual_prices.append(ForecastDataPoint(
+            timestamp=ts_str,
+            value=float(row["Close"]),
+            lower=float(row["Close"]),  # Actual has no confidence bands
+            upper=float(row["Close"]),
+            is_forecast=False,
+        ))
+
+    # Create backtest forecast series
+    backtest_series = []
+    for idx, row in forecast_df.iterrows():
+        if idx < cutoff_ts:
+            continue  # Only include forecast period
+
+        if data_tz is not None:
+            if idx.tzinfo is None:
+                if hasattr(data_tz, 'localize'):
+                    ts = data_tz.localize(idx)
+                else:
+                    ts = idx.replace(tzinfo=data_tz)
+            else:
+                ts = idx
+            ts_str = ts.isoformat()
+        else:
+            ts_str = idx.strftime("%Y-%m-%dT00:00:00+00:00")
+
+        backtest_series.append(ForecastDataPoint(
+            timestamp=ts_str,
+            value=float(row["yhat"]),
+            lower=float(row["yhat_lower"]),
+            upper=float(row["yhat_upper"]),
+            is_forecast=True,
+        ))
+
+    # Calculate forecast end date
+    if len(backtest_series) > 0:
+        forecast_end_date = backtest_series[-1].timestamp[:10]
+    else:
+        forecast_end_date = request.cutoff_date
+
+    backtest_forecast = ForecastSeries(
+        horizon="backtest",
+        display_name="Backtest",
+        color="#9333ea",  # Purple
+        training_end_date=result.training_end_date,
+        forecast_start_date=request.cutoff_date,
+        mape=metrics.mape,
+        rmse=metrics.rmse,
+        series=backtest_series,
+    )
+
+    return ProphetBacktestResponse(
+        symbol=request.symbol.upper(),
+        timestamp=datetime.utcnow(),
+        cutoff_date=request.cutoff_date,
+        today_date=today.strftime("%Y-%m-%d"),
+        forecast_end_date=forecast_end_date,
+        actual_prices=actual_prices,
+        backtest_forecast=backtest_forecast,
+        metrics=metrics,
+        comparison_data=comparison_data,
+        from_cache=False,
         warning=warning,
     )

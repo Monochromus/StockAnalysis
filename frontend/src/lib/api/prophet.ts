@@ -11,6 +11,8 @@ import type {
   ProphetIndicatorsRequest,
   ProphetIndicatorsResponse,
   ProphetComponentsResponse,
+  ProphetBacktestRequest,
+  ProphetBacktestResponse,
 } from '$lib/types';
 
 /**
@@ -57,4 +59,13 @@ export async function getComponents(
   return apiClient.get<ProphetComponentsResponse>(
     `/prophet/components/${encodeURIComponent(symbol)}?${params}`
   );
+}
+
+/**
+ * Run Prophet backtest: train on data before cutoff_date, compare forecast to actual.
+ */
+export async function backtestProphet(
+  request: ProphetBacktestRequest
+): Promise<ProphetBacktestResponse> {
+  return apiClient.post<ProphetBacktestResponse>('/prophet/backtest', request);
 }

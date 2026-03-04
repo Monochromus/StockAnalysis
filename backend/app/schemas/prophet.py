@@ -165,3 +165,68 @@ class ProphetComponentsResponse(BaseModel):
     horizon: str
     components: ComponentSeries
     warning: Optional[str] = None
+
+
+# ============== Backtest Schemas ==============
+
+class ProphetBacktestRequest(BaseModel):
+    """Request for Prophet backtest analysis."""
+
+    symbol: str = Field(..., description="Ticker symbol")
+    period: str = Field("5y", description="Data period for training")
+    interval: str = Field("1d", description="Data interval")
+    cutoff_date: str = Field(..., description="Training cutoff date (YYYY-MM-DD) - model trains ONLY on data before this date")
+    forecast_periods: int = Field(365, ge=30, le=730, description="Days to forecast from cutoff")
+
+    # Prophet configuration
+    yearly_seasonality: bool = Field(True, description="Include yearly seasonality")
+    weekly_seasonality: bool = Field(True, description="Include weekly seasonality")
+    changepoint_prior_scale: float = Field(
+        0.05, ge=0.001, le=0.5,
+        description="Flexibility of changepoints"
+    )
+    interval_width: float = Field(
+        0.95, ge=0.5, le=0.99,
+        description="Confidence interval width"
+    )
+
+
+class ProphetBacktestMetrics(BaseModel):
+    """Metrics comparing backtest forecast to actual prices."""
+
+    mape: float = Field(..., description="Mean Absolute Percentage Error (%)")
+    rmse: float = Field(..., description="Root Mean Square Error")
+    mae: float = Field(..., description="Mean Absolute Error")
+    correlation: float = Field(..., description="Pearson correlation (-1 to 1)")
+    r_squared: float = Field(..., description="Coefficient of determination")
+    direction_accuracy: float = Field(..., description="% correct direction predictions")
+    days_forecasted: int = Field(..., description="Number of days in forecast")
+    days_with_actual: int = Field(..., description="Days with actual data for comparison")
+
+
+class BacktestDataPoint(BaseModel):
+    """Single backtest comparison point."""
+
+    timestamp: str
+    actual: Optional[float]
+    forecast: float
+    lower: float
+    upper: float
+    error: Optional[float] = None
+    error_pct: Optional[float] = None
+
+
+class ProphetBacktestResponse(BaseModel):
+    """Response for Prophet backtest analysis."""
+
+    symbol: str
+    timestamp: datetime
+    cutoff_date: str = Field(..., description="Training cutoff date")
+    today_date: str = Field(..., description="Current date")
+    forecast_end_date: str = Field(..., description="End of forecast period")
+    actual_prices: List[ForecastDataPoint] = Field(..., description="Actual price data after cutoff")
+    backtest_forecast: ForecastSeries = Field(..., description="Forecast generated from training before cutoff")
+    metrics: ProphetBacktestMetrics = Field(..., description="Comparison metrics")
+    comparison_data: List[BacktestDataPoint] = Field(..., description="Point-by-point comparison")
+    from_cache: bool = False
+    warning: Optional[str] = None

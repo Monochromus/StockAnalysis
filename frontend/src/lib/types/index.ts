@@ -1039,6 +1039,54 @@ export const DEFAULT_PROPHET_HORIZON_TOGGLES: ProphetHorizonToggles = {
   short_term: true,
 };
 
+// Prophet Backtest types
+export interface ProphetBacktestRequest {
+  symbol: string;
+  cutoff_date: string;  // YYYY-MM-DD - training ends BEFORE this date
+  period?: string;
+  interval?: string;
+  forecast_periods?: number;
+  yearly_seasonality?: boolean;
+  weekly_seasonality?: boolean;
+  changepoint_prior_scale?: number;
+  interval_width?: number;
+}
+
+export interface ProphetBacktestMetrics {
+  mape: number;
+  rmse: number;
+  mae: number;
+  correlation: number;
+  r_squared: number;
+  direction_accuracy: number;
+  days_forecasted: number;
+  days_with_actual: number;
+}
+
+export interface BacktestDataPoint {
+  timestamp: string;
+  actual: number | null;
+  forecast: number;
+  lower: number;
+  upper: number;
+  error: number | null;
+  error_pct: number | null;
+}
+
+export interface ProphetBacktestResponse {
+  symbol: string;
+  timestamp: string;
+  cutoff_date: string;
+  today_date: string;
+  forecast_end_date: string;
+  actual_prices: ProphetForecastDataPoint[];
+  backtest_forecast: ProphetForecastSeries;
+  metrics: ProphetBacktestMetrics;
+  comparison_data: BacktestDataPoint[];
+  from_cache: boolean;
+  warning: string | null;
+}
+
 export interface ProphetSettings {
   period: string;
   interval: string;

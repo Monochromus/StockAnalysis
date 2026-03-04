@@ -13,6 +13,9 @@ import type {
   ProphetHorizonToggles,
   ProphetSettings,
   ProphetAnalysisResponse,
+  ProphetBacktestResponse,
+  ProphetBacktestMetrics,
+  BacktestDataPoint,
 } from '$lib/types';
 import { DEFAULT_PROPHET_HORIZON_TOGGLES, DEFAULT_PROPHET_SETTINGS } from '$lib/types';
 import {
@@ -20,6 +23,7 @@ import {
   forecastPrice,
   forecastIndicators,
   getComponents,
+  backtestProphet,
 } from '$lib/api/prophet';
 import { debugStore } from './debug';
 
@@ -56,6 +60,13 @@ interface ProphetState {
   // Cache info
   fromCache: boolean;
   lastAnalyzedAt: string | null;
+
+  // Backtest state
+  backtestEnabled: boolean;
+  backtestCutoffDate: string | null;
+  backtestLoading: boolean;
+  backtestResult: ProphetBacktestResponse | null;
+  backtestError: string | null;
 }
 
 const initialState: ProphetState = {
@@ -82,6 +93,13 @@ const initialState: ProphetState = {
   symbol: null,
   fromCache: false,
   lastAnalyzedAt: null,
+
+  // Backtest state
+  backtestEnabled: false,
+  backtestCutoffDate: null,
+  backtestLoading: false,
+  backtestResult: null,
+  backtestError: null,
 };
 
 function log(message: string, data?: unknown) {
@@ -311,6 +329,103 @@ function createProphetStore() {
         symbol: null,
         fromCache: false,
         lastAnalyzedAt: null,
+        backtestResult: null,
+        backtestError: null,
+      }));
+    },
+
+    /**
+     * Toggle backtest mode on/off.
+     */
+    toggleBacktest() {
+      log('toggleBacktest');
+      update((state) => ({
+        ...state,
+        backtestEnabled: !state.backtestEnabled,
+        // Clear backtest result when disabling
+        ...(!state.backtestEnabled ? {} : { backtestResult: null, backtestError: null }),
+      }));
+    },
+
+    /**
+     * Set backtest cutoff date.
+     */
+    setBacktestCutoffDate(date: string | null) {
+      log('setBacktestCutoffDate', { date });
+      update((state) => ({
+        ...state,
+        backtestCutoffDate: date,
+      }));
+    },
+
+    /**
+     * Run backtest with the current settings.
+     */
+    async runBacktest(symbol: string, cutoffDate: string) {
+      log('runBacktest called', { symbol, cutoffDate });
+
+      update((state) => ({
+        ...state,
+        backtestLoading: true,
+        backtestError: null,
+      }));
+
+      try {
+        let settings: ProphetSettings;
+        const unsub = subscribe((s) => {
+          settings = s.settings;
+        });
+        unsub();
+
+        const response = await backtestProphet({
+          symbol,
+          cutoff_date: cutoffDate,
+          period: settings!.period,
+          interval: settings!.interval,
+          forecast_periods: settings!.forecast_periods,
+          yearly_seasonality: settings!.yearly_seasonality,
+          weekly_seasonality: settings!.weekly_seasonality,
+          changepoint_prior_scale: settings!.changepoint_prior_scale,
+          interval_width: settings!.interval_width,
+        });
+
+        log('Backtest response received', {
+          cutoffDate: response.cutoff_date,
+          todayDate: response.today_date,
+          metricsCorrelation: response.metrics.correlation,
+          metricsMAPE: response.metrics.mape,
+        });
+
+        update((state) => ({
+          ...state,
+          backtestResult: response,
+          backtestLoading: false,
+          backtestCutoffDate: cutoffDate,
+        }));
+
+        return response;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Backtest failed';
+        log('ERROR in runBacktest', { error: errorMessage });
+        update((state) => ({
+          ...state,
+          backtestLoading: false,
+          backtestError: errorMessage,
+        }));
+        return null;
+      }
+    },
+
+    /**
+     * Clear backtest results.
+     */
+    clearBacktest() {
+      log('clearBacktest called');
+      update((state) => ({
+        ...state,
+        backtestResult: null,
+        backtestError: null,
+        backtestCutoffDate: null,
       }));
     },
   };
@@ -359,3 +474,18 @@ export const horizonColors = derived(prophetStore, () => ({
   mid_term: '#2ca02c',    // Green
   short_term: '#d62728',  // Red
 }));
+
+// Derived store: Check if backtest is active
+export const isBacktestActive = derived(prophetStore, ($prophet) => {
+  return $prophet.backtestEnabled && $prophet.backtestResult !== null;
+});
+
+// Derived store: Get backtest forecast for chart display
+export const backtestForecast = derived(prophetStore, ($prophet) => {
+  return $prophet.backtestResult?.backtest_forecast ?? null;
+});
+
+// Derived store: Get backtest metrics
+export const backtestMetrics = derived(prophetStore, ($prophet) => {
+  return $prophet.backtestResult?.metrics ?? null;
+});

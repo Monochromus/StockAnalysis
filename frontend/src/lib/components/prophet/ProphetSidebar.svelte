@@ -9,11 +9,13 @@
     XGBoostFeatureToggles,
     XGBoostMetrics,
     FeatureImportance,
+    ProphetBacktestResponse,
   } from '$lib/types';
   import { ModuleActivateToggle } from '$lib/components/ui';
   import ProphetForecastStatus from './ProphetForecastStatus.svelte';
   import ProphetSettingsPanel from './ProphetSettingsPanel.svelte';
   import ProphetComponentWidget from './ProphetComponentWidget.svelte';
+  import ProphetBacktestPanel from './ProphetBacktestPanel.svelte';
   import XGBoostSettingsPanel from '$lib/components/xgboost/XGBoostSettingsPanel.svelte';
 
   let {
@@ -49,6 +51,16 @@
     onUpdateXGBoostSettings = () => {},
     onUpdateXGBoostFeatureToggles = () => {},
     onResetXGBoostSettings = () => {},
+    // Backtest props
+    backtestEnabled = false,
+    backtestLoading = false,
+    backtestResult = null,
+    backtestCutoffDate = null,
+    backtestError = null,
+    onToggleBacktest = () => {},
+    onRunBacktest = (cutoffDate: string) => {},
+    onSetBacktestCutoffDate = (date: string | null) => {},
+    onClearBacktest = () => {},
   }: {
     priceSummaries?: ProphetHorizonSummary[];
     components?: ProphetComponentSeries | null;
@@ -82,11 +94,22 @@
     onUpdateXGBoostSettings?: (settings: Partial<XGBoostSettings>) => void;
     onUpdateXGBoostFeatureToggles?: (toggles: Partial<XGBoostFeatureToggles>) => void;
     onResetXGBoostSettings?: () => void;
+    // Backtest props
+    backtestEnabled?: boolean;
+    backtestLoading?: boolean;
+    backtestResult?: ProphetBacktestResponse | null;
+    backtestCutoffDate?: string | null;
+    backtestError?: string | null;
+    onToggleBacktest?: () => void;
+    onRunBacktest?: (cutoffDate: string) => void;
+    onSetBacktestCutoffDate?: (date: string | null) => void;
+    onClearBacktest?: () => void;
   } = $props();
 
   // UI state
   let showSettings = $state(false);
   let showComponentsSection = $state(false);
+  let showBacktestSection = $state(false);
   let showXGBoostSection = $state(false);
 
   const hasForecasts = $derived(priceSummaries.length > 0);
@@ -292,6 +315,47 @@
         {/if}
       </div>
 
+      <!-- Backtest Section -->
+      <div class="border-t border-stone-700/30">
+        <button
+          class="w-full p-3 flex items-center justify-between text-left hover:bg-stone-700/30 transition-all"
+          onclick={() => showBacktestSection = !showBacktestSection}
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Backtest</span>
+            {#if backtestResult}
+              <span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400">
+                r={backtestResult.metrics.correlation.toFixed(2)}
+              </span>
+            {/if}
+          </div>
+          <svg
+            class="w-4 h-4 text-text-muted transition-transform duration-200"
+            class:rotate-180={showBacktestSection}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {#if showBacktestSection}
+          <ProphetBacktestPanel
+            enabled={backtestEnabled}
+            loading={backtestLoading}
+            result={backtestResult}
+            cutoffDate={backtestCutoffDate}
+            error={backtestError}
+            {symbol}
+            onToggle={onToggleBacktest}
+            {onRunBacktest}
+            onSetCutoffDate={onSetBacktestCutoffDate}
+            onClearBacktest={onClearBacktest}
+          />
+        {/if}
+      </div>
+
       <!-- XGBoost Section -->
       <div class="border-t border-stone-700/30">
         <button
@@ -351,6 +415,6 @@
 <!-- Component Widget (floating) -->
 <ProphetComponentWidget
   {components}
-  {activeComponentWidget}
+  activeWidget={activeComponentWidget}
   onClose={() => onSetActiveComponentWidget(null)}
 />

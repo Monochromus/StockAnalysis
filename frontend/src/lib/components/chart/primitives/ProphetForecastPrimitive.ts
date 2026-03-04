@@ -42,6 +42,17 @@ const HORIZON_COLORS = {
     fill: 'rgba(139, 115, 85, 0.12)',   // Slightly more visible for confidence
     border: 'rgba(139, 115, 85, 0.35)',
   },
+  backtest: {
+    line: '#9333ea',        // Purple - Backtest forecast
+    fill: 'rgba(147, 51, 234, 0.08)',
+    border: 'rgba(147, 51, 234, 0.30)',
+  },
+};
+
+// Backtest marker colors
+const BACKTEST_MARKERS = {
+  cutoff: '#9333ea',  // Purple - cutoff date
+  today: '#22c55e',   // Green - today's date
 };
 
 interface Point {
@@ -67,12 +78,19 @@ interface ForecastLineData {
   historicalEndX: number | null;
 }
 
+interface BacktestMarkers {
+  cutoffX: number | null;
+  todayX: number | null;
+}
+
 // Renderer
 class ProphetForecastRenderer implements IPrimitivePaneRenderer {
   private _lines: ForecastLineData[] = [];
+  private _backtestMarkers: BacktestMarkers | null = null;
 
-  update(lines: ForecastLineData[]): void {
+  update(lines: ForecastLineData[], backtestMarkers?: BacktestMarkers | null): void {
     this._lines = lines;
+    this._backtestMarkers = backtestMarkers ?? null;
   }
 
   draw(target: any): void {
@@ -90,6 +108,60 @@ class ProphetForecastRenderer implements IPrimitivePaneRenderer {
     // Draw each forecast horizon
     for (const line of this._lines) {
       this._drawForecastLine(ctx, line);
+    }
+
+    // Draw backtest markers if present
+    if (this._backtestMarkers) {
+      this._drawBacktestMarkers(ctx, this._backtestMarkers);
+    }
+  }
+
+  private _drawBacktestMarkers(ctx: CanvasRenderingContext2D, markers: BacktestMarkers): void {
+    const chartHeight = ctx.canvas.height;
+
+    // Draw cutoff date line (purple dashed)
+    if (markers.cutoffX !== null) {
+      ctx.save();
+      ctx.strokeStyle = BACKTEST_MARKERS.cutoff;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.globalAlpha = 0.8;
+
+      ctx.beginPath();
+      ctx.moveTo(markers.cutoffX, 0);
+      ctx.lineTo(markers.cutoffX, chartHeight);
+      ctx.stroke();
+
+      // Draw label
+      ctx.setLineDash([]);
+      ctx.fillStyle = BACKTEST_MARKERS.cutoff;
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Cutoff', markers.cutoffX, 12);
+
+      ctx.restore();
+    }
+
+    // Draw today line (green solid)
+    if (markers.todayX !== null) {
+      ctx.save();
+      ctx.strokeStyle = BACKTEST_MARKERS.today;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.8;
+
+      ctx.beginPath();
+      ctx.moveTo(markers.todayX, 0);
+      ctx.lineTo(markers.todayX, chartHeight);
+      ctx.stroke();
+
+      // Draw label
+      ctx.fillStyle = BACKTEST_MARKERS.today;
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Heute', markers.todayX, 12);
+
+      ctx.restore();
     }
   }
 
@@ -201,7 +273,8 @@ class ProphetForecastPaneView implements IPrimitivePaneView {
   update(): void {
     try {
       const lines = this._source.getLines();
-      this._renderer.update(lines);
+      const backtestMarkers = this._source.getBacktestMarkers();
+      this._renderer.update(lines, backtestMarkers);
     } catch {
       // Update error - silently ignore
     }
@@ -235,6 +308,11 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
     mid_term: true,
     short_term: true,
   };
+
+  // Backtest mode state
+  private _backtestMode: boolean = false;
+  private _backtestCutoffDate: string | null = null;
+  private _backtestTodayDate: string | null = null;
 
   constructor() {
     this._paneView = new ProphetForecastPaneView(this);
@@ -281,7 +359,47 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
   clear(): void {
     this._forecasts = [];
     this._historicalEndDate = null;
+    this._backtestMode = false;
+    this._backtestCutoffDate = null;
+    this._backtestTodayDate = null;
     this._requestUpdate?.();
+  }
+
+  // Backtest mode setters
+  setBacktestMode(enabled: boolean, cutoffDate?: string, todayDate?: string): void {
+    this._backtestMode = enabled;
+    this._backtestCutoffDate = cutoffDate ?? null;
+    this._backtestTodayDate = todayDate ?? null;
+    this._requestUpdate?.();
+  }
+
+  clearBacktestMode(): void {
+    this._backtestMode = false;
+    this._backtestCutoffDate = null;
+    this._backtestTodayDate = null;
+    this._requestUpdate?.();
+  }
+
+  // Get backtest markers for rendering
+  getBacktestMarkers(): BacktestMarkers | null {
+    if (!this._backtestMode || !this._chart) return null;
+
+    const timeScale = this._chart.timeScale();
+
+    let cutoffX: number | null = null;
+    let todayX: number | null = null;
+
+    if (this._backtestCutoffDate) {
+      const cutoffTs = this._normalizeTimestamp(this._backtestCutoffDate);
+      cutoffX = timeScale.timeToCoordinate(cutoffTs as Time);
+    }
+
+    if (this._backtestTodayDate) {
+      const todayTs = this._normalizeTimestamp(this._backtestTodayDate);
+      todayX = timeScale.timeToCoordinate(todayTs as Time);
+    }
+
+    return { cutoffX, todayX };
   }
 
   private _normalizeTimestamp(timestamp: string): number {

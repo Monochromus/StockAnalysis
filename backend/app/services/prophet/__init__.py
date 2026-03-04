@@ -4,6 +4,7 @@ from .config import ProphetConfig, ForecastHorizon
 from .indicators import ProphetIndicators
 from .prophet_model import ProphetForecaster, ForecastResult, ComponentData
 from .cache import ProphetCache, CachedForecast, get_prophet_cache
+from .backtest_metrics import calculate_backtest_metrics
 
 __all__ = [
     # Configuration
@@ -19,4 +20,6 @@ __all__ = [
     "ProphetCache",
     "CachedForecast",
     "get_prophet_cache",
+    # Backtest
+    "calculate_backtest_metrics",
 ]

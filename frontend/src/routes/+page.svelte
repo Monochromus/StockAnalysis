@@ -361,6 +361,25 @@
     }
   }
 
+  // Prophet Backtest handlers
+  function handleProphetToggleBacktest() {
+    prophetStore.toggleBacktest();
+  }
+
+  async function handleProphetRunBacktest(cutoffDate: string) {
+    if (currentSymbol) {
+      await prophetStore.runBacktest(currentSymbol, cutoffDate);
+    }
+  }
+
+  function handleProphetSetBacktestCutoffDate(date: string | null) {
+    prophetStore.setBacktestCutoffDate(date);
+  }
+
+  function handleProphetClearBacktest() {
+    prophetStore.clearBacktest();
+  }
+
   // XGBoost specific handlers
   async function handleToggleXGBoost() {
     const wasEnabled = $xgboostStore.enabled;
@@ -436,15 +455,24 @@
   // When XGBoost is enabled, show a single combined forecast line (emerald green)
   // XGBoost now includes both historical corrections AND future predictions
   // The line is shifted so it meets the current price at the last candle date
+  // Also handles backtest mode - shows backtest forecast when available
   let correctedPriceForecasts = $derived.by(() => {
     // Access store values to establish reactivity
     const xgboostState = $xgboostStore;
     const prophetForecasts = $visiblePriceForecasts;
+    const prophetState = $prophetStore;
     const candles = $tickerStore.candles;
 
     const xgboostEnabled = xgboostState.enabled;
     const hybridForecasts = xgboostState.hybridForecasts;
     const xgboostLoading = xgboostState.loading;
+
+    // Check if backtest mode is active
+    const backtestResult = prophetState.backtestResult;
+    if (backtestResult && backtestResult.backtest_forecast) {
+      // In backtest mode, show the backtest forecast
+      return [backtestResult.backtest_forecast];
+    }
 
     // If XGBoost is not enabled, return original Prophet forecasts
     if (!xgboostEnabled) {
@@ -566,6 +594,9 @@
         prophetHorizonToggles={$modulesStore.prophet ? $prophetStore.horizonToggles : null}
         prophetEnabled={$modulesStore.prophet}
         prophetTrainingEndDate={$modulesStore.prophet ? $trainingEndDate : null}
+        prophetBacktestMode={$modulesStore.prophet && $prophetStore.backtestResult !== null}
+        prophetBacktestCutoffDate={$prophetStore.backtestResult?.cutoff_date ?? null}
+        prophetBacktestTodayDate={$prophetStore.backtestResult?.today_date ?? null}
       />
 
       <!-- Loading Overlay -->
@@ -739,6 +770,15 @@
           onUpdateXGBoostSettings={handleUpdateXGBoostSettings}
           onUpdateXGBoostFeatureToggles={handleUpdateXGBoostFeatureToggles}
           onResetXGBoostSettings={handleResetXGBoostSettings}
+          backtestEnabled={$prophetStore.backtestEnabled}
+          backtestLoading={$prophetStore.backtestLoading}
+          backtestResult={$prophetStore.backtestResult}
+          backtestCutoffDate={$prophetStore.backtestCutoffDate}
+          backtestError={$prophetStore.backtestError}
+          onToggleBacktest={handleProphetToggleBacktest}
+          onRunBacktest={handleProphetRunBacktest}
+          onSetBacktestCutoffDate={handleProphetSetBacktestCutoffDate}
+          onClearBacktest={handleProphetClearBacktest}
         />
       {:else if showHMMSidebar}
         <HMMSidebar
