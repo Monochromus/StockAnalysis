@@ -79,7 +79,7 @@ function createUIStore() {
 
     toggleViewMode: () =>
       update((state) => {
-        const modes: ViewMode[] = ['chart', 'calendar', 'news'];
+        const modes: ViewMode[] = ['chart', 'calendar', 'news', 'cot'];
         const currentIndex = modes.indexOf(state.viewMode);
         const nextIndex = (currentIndex + 1) % modes.length;
         return { ...state, viewMode: modes[nextIndex] };

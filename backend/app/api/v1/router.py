@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import ticker, market_data, analysis, wave_engine, hmm, prophet, xgboost, seasonality, news
+from app.api.v1 import ticker, market_data, analysis, wave_engine, hmm, prophet, xgboost, seasonality, news, cot
 
 router = APIRouter()
 
@@ -13,3 +13,4 @@ router.include_router(prophet.router, prefix="/prophet", tags=["prophet"])
 router.include_router(xgboost.router, prefix="/xgboost", tags=["xgboost"])
 router.include_router(seasonality.router, prefix="/seasonality", tags=["seasonality"])
 router.include_router(news.router, prefix="/news", tags=["news"])
+router.include_router(cot.router, prefix="/cot", tags=["cot"])

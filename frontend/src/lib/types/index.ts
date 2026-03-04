@@ -1270,8 +1270,8 @@ export interface WatchlistItem {
   addedAt: string;  // ISO timestamp
 }
 
-// View mode for switching between chart, calendar, and news
-export type ViewMode = 'chart' | 'calendar' | 'news';
+// View mode for switching between chart, calendar, news, and COT
+export type ViewMode = 'chart' | 'calendar' | 'news' | 'cot';
 
 // ============== News Dashboard Types ==============
 
@@ -1347,4 +1347,103 @@ export interface NewsStatusResponse {
   cache_enabled: boolean;
   cache_ttl_seconds: number;
   error: string | null;
+}
+
+// ============== COT (Commitments of Traders) Types ==============
+
+export type COTSignal = 'bullish' | 'bearish' | 'neutral';
+export type COTSignalStrength = 'strong' | 'moderate' | 'weak';
+
+export interface COTPositionData {
+  date: string;
+  open_interest: number;
+  commercial_long: number;
+  commercial_short: number;
+  commercial_net: number;
+  commercial_pct_oi: number;
+  noncommercial_long: number;
+  noncommercial_short: number;
+  noncommercial_net: number;
+  noncommercial_pct_oi: number;
+  nonreportable_long: number;
+  nonreportable_short: number;
+  nonreportable_net: number;
+}
+
+export interface COTAnalysis {
+  symbol: string;
+  commodity_name: string;
+  exchange: string;
+  report_type: string;
+  last_update: string;
+  current: COTPositionData;
+  history: COTPositionData[];
+  cot_index_commercial: number;
+  cot_index_noncommercial: number;
+  lookback_weeks: number;
+  weekly_change_commercial: number;
+  weekly_change_noncommercial: number;
+  monthly_change_commercial: number;
+  monthly_change_noncommercial: number;
+  signal: COTSignal;
+  signal_strength: COTSignalStrength;
+  interpretation: string;
+  from_cache: boolean;
+  cache_timestamp: string | null;
+}
+
+export interface COTDashboardItem {
+  symbol: string;
+  commodity_name: string;
+  group: string;
+  cot_index_commercial: number;
+  cot_index_noncommercial: number;
+  commercial_net: number;
+  noncommercial_net: number;
+  weekly_change_commercial: number;
+  weekly_change_noncommercial: number;
+  signal: COTSignal;
+  signal_strength: COTSignalStrength;
+  last_update: string;
+  error?: string;
+}
+
+export interface COTDashboardResponse {
+  success: boolean;
+  items: COTDashboardItem[];
+  errors: Record<string, string>;
+  timestamp: string;
+}
+
+export interface COTStatusResponse {
+  available: boolean;
+  last_cftc_update: string | null;
+  cache_enabled: boolean;
+  supported_symbols: string[];
+  supported_groups: string[];
+}
+
+export interface COTMappingInfo {
+  symbol: string;
+  commodity_name: string;
+  group: string;
+  exchange: string;
+}
+
+export interface COTMappingsResponse {
+  mappings: COTMappingInfo[];
+  count: number;
+}
+
+export interface COTRefreshResponse {
+  success: boolean;
+  symbol: string;
+  message: string;
+  new_report_date: string | null;
+}
+
+export interface COTHistoryResponse {
+  symbol: string;
+  weeks: number;
+  data: COTPositionData[];
 }

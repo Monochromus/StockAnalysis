@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     news_cache_ttl_seconds: int = 14400  # 4 hours
     news_cache_db_path: str = "data/news_cache.db"
 
+    # COT (Commitments of Traders) Settings
+    cot_cache_ttl_seconds: int = 86400  # 24 hours
+    cot_cache_db_path: str = "data/cot_cache.db"
+    cot_lookback_weeks: int = 52  # Default lookback for COT Index
+    cot_app_token: Optional[str] = None  # Optional Socrata API token
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

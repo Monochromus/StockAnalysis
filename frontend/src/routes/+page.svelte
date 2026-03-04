@@ -12,6 +12,7 @@
   import { WatchlistButton } from '$lib/components/watchlist';
   import ViewToggle from '$lib/components/ui/ViewToggle.svelte';
   import { NewsDashboard } from '$lib/components/news';
+  import { COTDashboard } from '$lib/components/cot';
   import { tickerStore } from '$lib/stores/ticker';
   import { analysisStore, waveOverlayData } from '$lib/stores/analysis';
   import { hmmStore } from '$lib/stores/hmm';
@@ -631,7 +632,7 @@
         <SeasonalityCalendarView symbol={currentSymbol} />
       </div>
     </div>
-  {:else}
+  {:else if $uiStore.viewMode === 'news'}
     <!-- NEWS LAYER - News dashboard view -->
     {@const headerHeight = $uiStore.headerVisible ? 5.5 : 0}
     {@const toolbarHeight = $uiStore.toolbarVisible ? 3.5 : 0}
@@ -639,6 +640,16 @@
     <div class="absolute z-0 overflow-hidden" style="top: {topOffset}rem; left: 1rem; right: {$uiStore.sidebarVisible && showAnySidebar ? '420px' : '1rem'}; bottom: 1rem;">
       <div class="h-full bg-stone-900/50 rounded-xl overflow-hidden">
         <NewsDashboard />
+      </div>
+    </div>
+  {:else}
+    <!-- COT LAYER - COT dashboard view -->
+    {@const headerHeight = $uiStore.headerVisible ? 5.5 : 0}
+    {@const toolbarHeight = $uiStore.toolbarVisible ? 3.5 : 0}
+    {@const topOffset = headerHeight + toolbarHeight + ($uiStore.headerVisible || $uiStore.toolbarVisible ? 1.5 : 0)}
+    <div class="absolute z-0 overflow-hidden" style="top: {topOffset}rem; left: 1rem; right: {$uiStore.sidebarVisible && showAnySidebar ? '420px' : '1rem'}; bottom: 1rem;">
+      <div class="h-full bg-stone-900/50 rounded-xl overflow-hidden">
+        <COTDashboard onSelectSymbol={(symbol) => { currentSymbol = symbol; uiStore.setViewMode('chart'); }} />
       </div>
     </div>
   {/if}
