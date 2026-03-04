@@ -51,6 +51,10 @@ def _create_position_data(record: dict) -> COTPositionData:
     )
 
 
+# =============================================================================
+# STATIC ROUTES (must be defined BEFORE dynamic /{symbol} routes)
+# =============================================================================
+
 @router.get("/status", response_model=COTStatusResponse)
 async def get_cot_status():
     """
@@ -96,6 +100,106 @@ async def get_cot_mappings():
 
     return COTMappingsResponse(mappings=mappings, count=len(mappings))
 
+
+@router.get("/dashboard", response_model=COTDashboardResponse)
+async def get_cot_dashboard(
+    symbols: List[str] = Query(
+        default=None,
+        description="List of symbols. If empty, uses default selection."
+    ),
+    force_refresh: bool = Query(default=False),
+):
+    """
+    Get COT dashboard data for multiple symbols.
+    """
+    # Default symbols if none provided
+    if not symbols:
+        symbols = ["GC=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "KC=F"]
+
+    items = []
+    errors = {}
+
+    for symbol in symbols:
+        if not COTMapping.is_supported(symbol):
+            errors[symbol] = "Symbol not supported"
+            continue
+
+        try:
+            # Use the main endpoint logic
+            cot_info = COTMapping.get_cot_info(symbol)
+
+            # Check cache
+            if not force_refresh:
+                cached = _cache.get(symbol)
+                if cached:
+                    items.append(COTDashboardItem(
+                        symbol=symbol,
+                        commodity_name=cot_info["name"] if cot_info else "",
+                        group=cot_info["group"] if cot_info else "",
+                        cot_index_commercial=cached.get("cot_index_commercial", 50.0),
+                        cot_index_noncommercial=cached.get("cot_index_noncommercial", 50.0),
+                        commercial_net=cached.get("current", {}).get("commercial_net", 0),
+                        noncommercial_net=cached.get("current", {}).get("noncommercial_net", 0),
+                        weekly_change_commercial=cached.get("weekly_change_commercial", 0),
+                        weekly_change_noncommercial=cached.get("weekly_change_noncommercial", 0),
+                        signal=cached.get("signal", "neutral"),
+                        signal_strength=cached.get("signal_strength", "weak"),
+                        last_update=cached.get("last_update", ""),
+                    ))
+                    continue
+
+            # Fetch fresh
+            with COTClient() as client:
+                raw_data = client.get_legacy_futures(symbol, weeks=52)
+
+            if not raw_data:
+                errors[symbol] = "No data available"
+                continue
+
+            analysis = COTAnalyzer.analyze(raw_data, lookback_weeks=52)
+
+            items.append(COTDashboardItem(
+                symbol=symbol,
+                commodity_name=cot_info["name"] if cot_info else "",
+                group=cot_info["group"] if cot_info else "",
+                cot_index_commercial=analysis["cot_index_commercial"],
+                cot_index_noncommercial=analysis["cot_index_noncommercial"],
+                commercial_net=raw_data[0].get("commercial_net", 0),
+                noncommercial_net=raw_data[0].get("noncommercial_net", 0),
+                weekly_change_commercial=analysis["weekly_change_commercial"],
+                weekly_change_noncommercial=analysis["weekly_change_noncommercial"],
+                signal=analysis["signal"],
+                signal_strength=analysis["signal_strength"],
+                last_update=raw_data[0].get("report_date", ""),
+            ))
+
+            # Cache the data
+            cache_data = {
+                "commodity_name": cot_info["name"] if cot_info else "",
+                "exchange": cot_info["exchange"] if cot_info else "",
+                "report_type": "legacy",
+                "last_update": raw_data[0].get("report_date", ""),
+                "current": raw_data[0] if raw_data else {},
+                "history": raw_data,
+                **analysis,
+            }
+            _cache.set(symbol, cache_data, raw_data[0].get("report_date", ""))
+
+        except Exception as e:
+            logger.error(f"Error fetching COT for {symbol}: {e}")
+            errors[symbol] = str(e)
+
+    return COTDashboardResponse(
+        success=len(items) > 0,
+        items=items,
+        errors=errors,
+        timestamp=datetime.utcnow().isoformat(),
+    )
+
+
+# =============================================================================
+# DYNAMIC ROUTES (with {symbol} parameter)
+# =============================================================================
 
 @router.get("/{symbol}", response_model=COTAnalysis)
 async def get_cot_data(
@@ -308,99 +412,3 @@ async def refresh_cot_data(symbol: str):
             message=f"Error: {str(e)}",
             new_report_date=None,
         )
-
-
-@router.get("/dashboard", response_model=COTDashboardResponse)
-async def get_cot_dashboard(
-    symbols: List[str] = Query(
-        default=None,
-        description="List of symbols. If empty, uses default selection."
-    ),
-    force_refresh: bool = Query(default=False),
-):
-    """
-    Get COT dashboard data for multiple symbols.
-    """
-    # Default symbols if none provided
-    if not symbols:
-        symbols = ["GC=F", "CL=F", "NG=F", "ZC=F", "ZW=F", "KC=F"]
-
-    items = []
-    errors = {}
-
-    for symbol in symbols:
-        if not COTMapping.is_supported(symbol):
-            errors[symbol] = "Symbol not supported"
-            continue
-
-        try:
-            # Use the main endpoint logic
-            cot_info = COTMapping.get_cot_info(symbol)
-
-            # Check cache
-            if not force_refresh:
-                cached = _cache.get(symbol)
-                if cached:
-                    items.append(COTDashboardItem(
-                        symbol=symbol,
-                        commodity_name=cot_info["name"] if cot_info else "",
-                        group=cot_info["group"] if cot_info else "",
-                        cot_index_commercial=cached.get("cot_index_commercial", 50.0),
-                        cot_index_noncommercial=cached.get("cot_index_noncommercial", 50.0),
-                        commercial_net=cached.get("current", {}).get("commercial_net", 0),
-                        noncommercial_net=cached.get("current", {}).get("noncommercial_net", 0),
-                        weekly_change_commercial=cached.get("weekly_change_commercial", 0),
-                        weekly_change_noncommercial=cached.get("weekly_change_noncommercial", 0),
-                        signal=cached.get("signal", "neutral"),
-                        signal_strength=cached.get("signal_strength", "weak"),
-                        last_update=cached.get("last_update", ""),
-                    ))
-                    continue
-
-            # Fetch fresh
-            with COTClient() as client:
-                raw_data = client.get_legacy_futures(symbol, weeks=52)
-
-            if not raw_data:
-                errors[symbol] = "No data available"
-                continue
-
-            analysis = COTAnalyzer.analyze(raw_data, lookback_weeks=52)
-
-            items.append(COTDashboardItem(
-                symbol=symbol,
-                commodity_name=cot_info["name"] if cot_info else "",
-                group=cot_info["group"] if cot_info else "",
-                cot_index_commercial=analysis["cot_index_commercial"],
-                cot_index_noncommercial=analysis["cot_index_noncommercial"],
-                commercial_net=raw_data[0].get("commercial_net", 0),
-                noncommercial_net=raw_data[0].get("noncommercial_net", 0),
-                weekly_change_commercial=analysis["weekly_change_commercial"],
-                weekly_change_noncommercial=analysis["weekly_change_noncommercial"],
-                signal=analysis["signal"],
-                signal_strength=analysis["signal_strength"],
-                last_update=raw_data[0].get("report_date", ""),
-            ))
-
-            # Cache the data
-            cache_data = {
-                "commodity_name": cot_info["name"] if cot_info else "",
-                "exchange": cot_info["exchange"] if cot_info else "",
-                "report_type": "legacy",
-                "last_update": raw_data[0].get("report_date", ""),
-                "current": raw_data[0] if raw_data else {},
-                "history": raw_data,
-                **analysis,
-            }
-            _cache.set(symbol, cache_data, raw_data[0].get("report_date", ""))
-
-        except Exception as e:
-            logger.error(f"Error fetching COT for {symbol}: {e}")
-            errors[symbol] = str(e)
-
-    return COTDashboardResponse(
-        success=len(items) > 0,
-        items=items,
-        errors=errors,
-        timestamp=datetime.utcnow().isoformat(),
-    )
