@@ -468,9 +468,10 @@
     const hybridForecasts = xgboostState.hybridForecasts;
     const xgboostLoading = xgboostState.loading;
 
-    // Check if backtest mode is active
+    // Check if backtest mode is active AND enabled
+    const backtestEnabled = prophetState.backtestEnabled;
     const backtestResult = prophetState.backtestResult;
-    if (backtestResult && backtestResult.backtest_forecast) {
+    if (backtestEnabled && backtestResult && backtestResult.backtest_forecast) {
       // In backtest mode, show the backtest forecast
       return [backtestResult.backtest_forecast];
     }
@@ -595,9 +596,9 @@
         prophetHorizonToggles={$modulesStore.prophet ? $prophetStore.horizonToggles : null}
         prophetEnabled={$modulesStore.prophet}
         prophetTrainingEndDate={$modulesStore.prophet ? $trainingEndDate : null}
-        prophetBacktestMode={$modulesStore.prophet && $prophetStore.backtestResult !== null}
-        prophetBacktestCutoffDate={$prophetStore.backtestResult?.cutoff_date ?? null}
-        prophetBacktestTodayDate={$prophetStore.backtestResult?.today_date ?? null}
+        prophetBacktestMode={$modulesStore.prophet && $prophetStore.backtestEnabled && $prophetStore.backtestResult !== null}
+        prophetBacktestCutoffDate={$prophetStore.backtestEnabled ? ($prophetStore.backtestResult?.cutoff_date ?? null) : null}
+        prophetBacktestTodayDate={$prophetStore.backtestEnabled ? ($prophetStore.backtestResult?.today_date ?? null) : null}
       />
 
       <!-- Loading Overlay -->

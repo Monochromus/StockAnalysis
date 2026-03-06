@@ -513,8 +513,8 @@ export class ProphetForecastPrimitive implements ISeriesPrimitive<Time> {
     for (const forecast of this._forecasts) {
       const horizon = forecast.horizon;
 
-      // Skip if toggle is off (except for "combined" which is always shown)
-      if (horizon !== 'combined') {
+      // Skip if toggle is off (except for "combined" and "backtest" which are always shown)
+      if (horizon !== 'combined' && horizon !== 'backtest') {
         const toggleKey = horizon as keyof ProphetHorizonToggles;
         if (!this._toggles[toggleKey]) continue;
       }

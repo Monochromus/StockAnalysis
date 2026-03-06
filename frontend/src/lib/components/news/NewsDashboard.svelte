@@ -3,6 +3,7 @@
   import { newsStore, newsAnalysesList } from '$lib/stores/news';
   import { watchlistSymbols } from '$lib/stores/watchlist';
   import CommodityNewsCard from './CommodityNewsCard.svelte';
+  import TradingOpportunitySummary from './TradingOpportunitySummary.svelte';
 
   // Load dashboard on mount and when watchlist changes
   let mounted = $state(false);
@@ -135,6 +136,9 @@
         </div>
       </div>
     {:else}
+      <!-- Trading Opportunity Summary -->
+      <TradingOpportunitySummary analyses={$newsAnalysesList} />
+
       <!-- Grid of Cards -->
       <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
         {#each $newsAnalysesList as analysis (analysis.symbol)}

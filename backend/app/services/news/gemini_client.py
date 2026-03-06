@@ -218,45 +218,65 @@ class GeminiNewsClient:
             }
 
             # Extract web search queries
-            if hasattr(metadata, 'web_search_queries') and metadata.web_search_queries:
-                result["web_search_queries"] = list(metadata.web_search_queries)
+            web_queries = getattr(metadata, 'web_search_queries', None)
+            if web_queries is not None:
+                try:
+                    result["web_search_queries"] = list(web_queries)
+                except (TypeError, ValueError):
+                    pass
 
             # Extract grounding chunks (sources)
-            if hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
-                for chunk in metadata.grounding_chunks:
-                    if hasattr(chunk, 'web') and chunk.web:
-                        result["grounding_chunks"].append({
-                            "web": {
-                                "uri": getattr(chunk.web, 'uri', ''),
-                                "title": getattr(chunk.web, 'title', ''),
-                            }
-                        })
+            grounding_chunks = getattr(metadata, 'grounding_chunks', None)
+            if grounding_chunks is not None:
+                try:
+                    for chunk in grounding_chunks:
+                        if hasattr(chunk, 'web') and chunk.web:
+                            result["grounding_chunks"].append({
+                                "web": {
+                                    "uri": getattr(chunk.web, 'uri', ''),
+                                    "title": getattr(chunk.web, 'title', ''),
+                                }
+                            })
+                except (TypeError, ValueError):
+                    pass
 
             # Extract grounding supports (text segment to source mapping)
-            if hasattr(metadata, 'grounding_supports') and metadata.grounding_supports:
-                for support in metadata.grounding_supports:
-                    support_data = {
-                        "segment": {
-                            "text": "",
-                            "start_index": 0,
-                            "end_index": 0,
-                        },
-                        "grounding_chunk_indices": [],
-                        "confidence_scores": [],
-                    }
+            grounding_supports = getattr(metadata, 'grounding_supports', None)
+            if grounding_supports is not None:
+                try:
+                    for support in grounding_supports:
+                        support_data = {
+                            "segment": {
+                                "text": "",
+                                "start_index": 0,
+                                "end_index": 0,
+                            },
+                            "grounding_chunk_indices": [],
+                            "confidence_scores": [],
+                        }
 
-                    if hasattr(support, 'segment') and support.segment:
-                        support_data["segment"]["text"] = getattr(support.segment, 'text', '')
-                        support_data["segment"]["start_index"] = getattr(support.segment, 'start_index', 0)
-                        support_data["segment"]["end_index"] = getattr(support.segment, 'end_index', 0)
+                        if hasattr(support, 'segment') and support.segment:
+                            support_data["segment"]["text"] = getattr(support.segment, 'text', '')
+                            support_data["segment"]["start_index"] = getattr(support.segment, 'start_index', 0)
+                            support_data["segment"]["end_index"] = getattr(support.segment, 'end_index', 0)
 
-                    if hasattr(support, 'grounding_chunk_indices'):
-                        support_data["grounding_chunk_indices"] = list(support.grounding_chunk_indices)
+                        chunk_indices = getattr(support, 'grounding_chunk_indices', None)
+                        if chunk_indices is not None:
+                            try:
+                                support_data["grounding_chunk_indices"] = list(chunk_indices)
+                            except (TypeError, ValueError):
+                                pass
 
-                    if hasattr(support, 'confidence_scores'):
-                        support_data["confidence_scores"] = list(support.confidence_scores)
+                        conf_scores = getattr(support, 'confidence_scores', None)
+                        if conf_scores is not None:
+                            try:
+                                support_data["confidence_scores"] = list(conf_scores)
+                            except (TypeError, ValueError):
+                                pass
 
-                    result["grounding_supports"].append(support_data)
+                        result["grounding_supports"].append(support_data)
+                except (TypeError, ValueError):
+                    pass
 
             return result
 

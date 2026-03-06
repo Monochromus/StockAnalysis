@@ -500,8 +500,13 @@ async def backtest_prophet(
     # Convert to DataFrame
     df, data_tz = _candles_to_dataframe(ohlcv_data.candles)
 
+    # Create timezone-aware cutoff timestamp if data has timezone
+    cutoff_ts = pd.Timestamp(cutoff_dt)
+    if data_tz is not None and df.index.tz is not None:
+        cutoff_ts = cutoff_ts.tz_localize(df.index.tz)
+
     # Check if we have data before cutoff
-    if df.index.min() >= pd.Timestamp(cutoff_dt):
+    if df.index.min() >= cutoff_ts:
         raise HTTPException(
             status_code=400,
             detail=f"No data available before cutoff_date {request.cutoff_date}"
@@ -531,7 +536,7 @@ async def backtest_prophet(
         )
 
     # Get actual prices after cutoff for comparison
-    cutoff_ts = pd.Timestamp(cutoff_dt)
+    # Reuse cutoff_ts from earlier (already timezone-aware if needed)
     actual_df = full_df[full_df.index >= cutoff_ts].copy()
 
     # Get forecast data
@@ -616,8 +621,12 @@ async def backtest_prophet(
 
     # Create backtest forecast series
     backtest_series = []
+    # Use naive cutoff for comparison with forecast_df (Prophet returns naive timestamps)
+    cutoff_naive = pd.Timestamp(cutoff_dt)
     for idx, row in forecast_df.iterrows():
-        if idx < cutoff_ts:
+        # Compare with naive timestamp (Prophet forecast is tz-naive)
+        idx_naive = idx.tz_localize(None) if idx.tzinfo is not None else idx
+        if idx_naive < cutoff_naive:
             continue  # Only include forecast period
 
         if data_tz is not None:

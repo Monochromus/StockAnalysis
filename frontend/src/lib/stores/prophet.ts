@@ -401,6 +401,7 @@ function createProphetStore() {
           backtestResult: response,
           backtestLoading: false,
           backtestCutoffDate: cutoffDate,
+          backtestEnabled: true,  // Auto-enable when backtest completes
         }));
 
         return response;

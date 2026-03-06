@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CommodityNewsAnalysis } from '$lib/types';
+  import type { CommodityNewsAnalysis, SourceLink } from '$lib/types';
   import MarketSentiment from './MarketSentiment.svelte';
   import UpcomingEvents from './UpcomingEvents.svelte';
   import NewsSourceList from './NewsSourceList.svelte';
@@ -33,6 +33,35 @@
     } catch {
       return iso;
     }
+  }
+
+  /**
+   * Convert citation markers [1], [2], etc. to clickable links
+   * that reference the sources array
+   */
+  function linkifyCitations(text: string, sources: SourceLink[]): string {
+    if (!sources || sources.length === 0) return escapeHtml(text);
+
+    // Match [1], [2], etc.
+    return escapeHtml(text).replace(/\[(\d+)\]/g, (match, num) => {
+      const index = parseInt(num, 10) - 1; // Convert to 0-based index
+      if (index >= 0 && index < sources.length) {
+        const source = sources[index];
+        const title = source.title || `Quelle ${num}`;
+        // Create a clickable superscript link
+        return `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 mx-0.5 text-[10px] font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 hover:text-amber-300 rounded transition-colors" title="${escapeHtml(title)}">${num}</a>`;
+      }
+      return match; // Return unchanged if source doesn't exist
+    });
+  }
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 </script>
 
@@ -80,8 +109,9 @@
   <div class="p-4 space-y-4">
     <!-- Market Assessment -->
     <div>
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
       <p class="text-stone-300 text-sm leading-relaxed">
-        {analysis.market_assessment.summary}
+        {@html linkifyCitations(analysis.market_assessment.summary, analysis.sources)}
       </p>
       {#if analysis.market_assessment.key_factors.length > 0}
         <div class="flex flex-wrap gap-1.5 mt-2">
@@ -114,12 +144,14 @@
       </button>
       {#if showNews}
         <div class="mt-2 space-y-2">
-          <p class="text-stone-400 text-sm">{analysis.news_summary}</p>
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          <p class="text-stone-400 text-sm">{@html linkifyCitations(analysis.news_summary, analysis.sources)}</p>
           {#if analysis.news_highlights.length > 0}
             <ul class="space-y-1">
               {#each analysis.news_highlights as highlight}
                 <li class="text-stone-400 text-sm pl-3 border-l-2 border-amber-500/30">
-                  {highlight}
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html linkifyCitations(highlight, analysis.sources)}
                 </li>
               {/each}
             </ul>
@@ -151,15 +183,18 @@
           <div class="mt-2 space-y-2 text-sm">
             <div>
               <span class="text-emerald-400 font-medium">Angebot:</span>
-              <span class="text-stone-400 ml-1">{analysis.supply_demand.supply_summary}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="text-stone-400 ml-1">{@html linkifyCitations(analysis.supply_demand.supply_summary, analysis.sources)}</span>
             </div>
             <div>
               <span class="text-amber-400 font-medium">Nachfrage:</span>
-              <span class="text-stone-400 ml-1">{analysis.supply_demand.demand_summary}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="text-stone-400 ml-1">{@html linkifyCitations(analysis.supply_demand.demand_summary, analysis.sources)}</span>
             </div>
             <div>
               <span class="text-stone-300 font-medium">Ausblick:</span>
-              <span class="text-stone-400 ml-1">{analysis.supply_demand.balance_outlook}</span>
+              <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+              <span class="text-stone-400 ml-1">{@html linkifyCitations(analysis.supply_demand.balance_outlook, analysis.sources)}</span>
             </div>
           </div>
         {/if}
@@ -196,7 +231,8 @@
                 {/each}
               </div>
             {/if}
-            <p class="text-stone-400 text-sm">{analysis.macro_factors.summary}</p>
+            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+            <p class="text-stone-400 text-sm">{@html linkifyCitations(analysis.macro_factors.summary, analysis.sources)}</p>
           </div>
         {/if}
       </div>

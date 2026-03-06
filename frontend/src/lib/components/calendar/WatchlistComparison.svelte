@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { MonthlyReturn } from '$lib/types';
-  import { watchlistStore, watchlistSymbols } from '$lib/stores/watchlist';
+  import { watchlistStore, watchlistSymbols, DEFAULT_SYMBOLS } from '$lib/stores/watchlist';
   import { seasonalityStore, MONTH_NAMES } from '$lib/stores/seasonality';
   import { COMMODITY_WATCHLIST, CATEGORY_CONFIG, type Commodity, type CategoryKey } from '$lib/data/commodities';
 
@@ -171,18 +171,23 @@
           {/if}
         </div>
 
-        <!-- Remove button -->
-        <button
-          type="button"
-          class="p-1 text-stone-500 hover:text-rose-400 transition-colors"
-          onclick={() => watchlistStore.remove(symbol)}
-          title="Aus Watchlist entfernen"
-        >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <!-- Remove button (only for custom symbols, not defaults) -->
+        {#if !DEFAULT_SYMBOLS.includes(symbol)}
+          <button
+            type="button"
+            class="p-1 text-stone-500 hover:text-rose-400 transition-colors"
+            onclick={() => watchlistStore.remove(symbol)}
+            title="Aus Watchlist entfernen"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        {:else}
+          <!-- Placeholder for default symbols to maintain alignment -->
+          <div class="w-6"></div>
+        {/if}
       </div>
     {/each}
 

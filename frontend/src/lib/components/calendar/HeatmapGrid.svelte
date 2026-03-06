@@ -59,7 +59,7 @@
       <div class="w-24 flex-shrink-0"></div>
       <div class="flex-1 flex">
         {#each Array.from({ length: 31 }, (_, i) => i + 1) as day}
-          <div class="w-6 h-6 flex items-center justify-center text-xs text-stone-500">{day}</div>
+          <div class="w-6 h-6 m-0.5 flex items-center justify-center text-xs text-stone-500">{day}</div>
         {/each}
       </div>
     </div>

@@ -484,6 +484,10 @@ class ProphetForecaster:
         """
         cutoff = pd.to_datetime(cutoff_date)
 
+        # Make cutoff timezone-aware if df.index has timezone
+        if df.index.tz is not None:
+            cutoff = cutoff.tz_localize(df.index.tz)
+
         # STRICT: Only data BEFORE cutoff (not <=)
         train_data = df[df.index < cutoff].copy()
 

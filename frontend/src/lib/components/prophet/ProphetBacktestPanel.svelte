@@ -66,6 +66,22 @@
 
 <div class="px-3 pb-3">
   <div class="space-y-3">
+    <!-- Toggle for showing backtest in chart -->
+    {#if result}
+      <div class="flex items-center justify-between p-2 liquid-glass-subtle rounded-lg">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-purple-500"></div>
+          <span class="text-xs text-text-primary">Im Chart anzeigen</span>
+        </div>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onchange={onToggle}
+          class="w-4 h-4 rounded border-stone-600 bg-stone-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+        />
+      </div>
+    {/if}
+
     <!-- Date Picker -->
     <div>
       <label class="block text-xs text-text-muted mb-1">Cutoff-Datum</label>

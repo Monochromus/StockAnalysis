@@ -129,53 +129,53 @@ class COTAnalyzer:
             signal = "bullish"
             strength = "strong"
             interpretation = (
-                "Commercials at extreme long positions while speculators are extremely short. "
-                "Smart money positioning suggests potential bullish reversal."
+                "Commercials in extremen Long-Positionen, während Spekulanten extrem short sind. "
+                "Das Smart-Money-Positioning deutet auf eine mögliche bullische Umkehr hin."
             )
         # Strong bearish: Commercials extremely short, specs extremely long
         elif cot_index_commercial <= 20 and cot_index_noncommercial >= 80:
             signal = "bearish"
             strength = "strong"
             interpretation = (
-                "Commercials at extreme short positions while speculators are extremely long. "
-                "Crowded long trade with smart money on the opposite side suggests caution."
+                "Commercials in extremen Short-Positionen, während Spekulanten extrem long sind. "
+                "Überfüllter Long-Trade mit Smart Money auf der Gegenseite - Vorsicht geboten."
             )
         # Moderate bullish
         elif cot_index_commercial >= 70:
             signal = "bullish"
             strength = "moderate"
             interpretation = (
-                "Commercials holding elevated long positions. "
-                "This often precedes upward price moves."
+                "Commercials halten erhöhte Long-Positionen. "
+                "Dies geht oft Aufwärtsbewegungen im Preis voraus."
             )
         # Moderate bearish
         elif cot_index_commercial <= 30:
             signal = "bearish"
             strength = "moderate"
             interpretation = (
-                "Commercials holding reduced long positions. "
-                "This often precedes downward price moves."
+                "Commercials halten reduzierte Long-Positionen. "
+                "Dies geht oft Abwärtsbewegungen im Preis voraus."
             )
         # Slight bullish based on changes
         elif weekly_change_commercial > 0 and cot_index_commercial >= 50:
             signal = "bullish"
             strength = "weak"
             interpretation = (
-                "Commercials increasing long positions. "
-                "Watch for continuation of accumulation."
+                "Commercials erhöhen ihre Long-Positionen. "
+                "Achten Sie auf eine Fortsetzung der Akkumulation."
             )
         # Slight bearish based on changes
         elif weekly_change_commercial < 0 and cot_index_commercial <= 50:
             signal = "bearish"
             strength = "weak"
             interpretation = (
-                "Commercials reducing long positions. "
-                "Watch for continuation of distribution."
+                "Commercials reduzieren ihre Long-Positionen. "
+                "Achten Sie auf eine Fortsetzung der Distribution."
             )
         else:
             interpretation = (
-                "No extreme positioning detected. "
-                "Market is in a neutral zone without clear COT-based directional bias."
+                "Keine extremen Positionierungen erkennbar. "
+                "Der Markt befindet sich in einer neutralen Zone ohne klare COT-basierte Richtungstendenz."
             )
 
         return signal, strength, interpretation
@@ -207,7 +207,7 @@ class COTAnalyzer:
                 "monthly_change_noncommercial": 0,
                 "signal": "neutral",
                 "signal_strength": "weak",
-                "interpretation": "Insufficient data for analysis.",
+                "interpretation": "Nicht genügend Daten für eine Analyse vorhanden.",
             }
 
         current = history[0]
